@@ -725,6 +725,9 @@ def pipeline(file_path, output_dir):
 
     # Exemplo do final:
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
+    with pd.ExcelWriter(final_path, engine='xlsxwriter') as writer:
+        df_matriz_rotas.to_excel(writer, sheet_name="Rotas", index=False)
+        # ...salva os outros DataFrames aqui também, se quiser
     return final_path
 
 uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
@@ -737,17 +740,21 @@ if uploaded_file:
                 f.write(uploaded_file.read())
             try:
                 excel_path = pipeline(temp_path, tempdir)
-                with open(excel_path, "rb") as f:
-                    data = f.read()
-                st.success("Processamento finalizado com sucesso!")
-                st.download_button(
-                    label="📥 Baixar Excel consolidado",
-                    data=data,
-                    file_name="rotas_bh_dados_tratados_completos.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                if os.path.exists(excel_path):
+                    with open(excel_path, "rb") as f:
+                        data = f.read()
+                    st.success("Processamento finalizado com sucesso!")
+                    st.download_button(
+                        label="📥 Baixar Excel consolidado",
+                        data=data,
+                        file_name="rotas_bh_dados_tratados_completos.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                else:
+                    st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
             except Exception as e:
                 st.error(f"Erro no processamento: {e}")
+
 
 st.markdown("""
 ---
