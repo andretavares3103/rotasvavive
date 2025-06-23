@@ -6,6 +6,33 @@ from datetime import datetime, timedelta
 from geopy.distance import geodesic
 import tempfile
 
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+import os
+from datetime import datetime, timedelta
+from geopy.distance import geodesic
+import tempfile
+import hashlib
+import urllib.parse
+
+# ⬇️ COLE AQUI ESTA FUNÇÃO ⬇️
+def gerar_link_aceite(os_id, prof_id, prof_nome):
+    chave = f"{os_id}_{prof_id}"
+    # Codifica a chave como hash para evitar manipulação
+    token = hashlib.sha256(chave.encode()).hexdigest()[:10]
+    # Altere para a URL real do seu app na Streamlit Cloud:
+    base_url = st.secrets.get("ACEITE_BASE_URL", "https://seu-app.streamlit.app/")
+    params = urllib.parse.urlencode({
+        "os": os_id,
+        "prof_id": prof_id,
+        "prof_nome": prof_nome,
+        "token": token
+    })
+    return f"{base_url}?{params}"
+
+
 st.set_page_config(page_title="Otimização Rotas Vavivê", layout="wide")
 st.title("Otimização de Rotas Vavivê")
 st.write("Faça upload do Excel original para gerar todos os dados tratados automaticamente.")
