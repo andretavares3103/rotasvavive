@@ -727,6 +727,22 @@ def pipeline(file_path, output_dir):
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
     with pd.ExcelWriter(final_path, engine='xlsxwriter') as writer:
         df_matriz_rotas.to_excel(writer, sheet_name="Rotas", index=False)
+        df_atendimentos.to_excel(writer, sheet_name="Atendimentos", index=False)
+        df_clientes.to_excel(writer, sheet_name="Clientes", index=False)
+        df_profissionais.to_excel(writer, sheet_name="Profissionais", index=False)
+        df_preferencias.to_excel(writer, sheet_name="Preferencias", index=False)
+        df_bloqueio.to_excel(writer, sheet_name="Bloqueio", index=False)
+        df_queridinhos.to_excel(writer, sheet_name="Queridinhos", index=False)
+        df_sumidinhos.to_excel(writer, sheet_name="Sumidinhos", index=False)
+        df_historico_60_dias.to_excel(writer, sheet_name="Historico 60 dias", index=False)
+        df_cliente_prestador.to_excel(writer, sheet_name="Cliente x Prestador", index=False)
+        df_qtd_por_prestador.to_excel(writer, sheet_name="Qtd por Prestador", index=False)
+        df_distancias.to_excel(writer, sheet_name="Distancias", index=False)
+        df_preferencias_completo.to_excel(writer, sheet_name="Preferencias Geo", index=False)
+        df_bloqueio_completo.to_excel(writer, sheet_name="Bloqueios Geo", index=False)
+        df_atendimentos_futuros_validos.to_excel(writer, sheet_name="Atend Futuros OK", index=False)
+        df_atendimentos_sem_localizacao.to_excel(writer, sheet_name="Atend Futuros Sem Loc", index=False)
+        df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
         # ...salva os outros DataFrames aqui também, se quiser
     return final_path
 
