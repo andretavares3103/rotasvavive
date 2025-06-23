@@ -766,6 +766,15 @@ if uploaded_file:
                         file_name="rotas_bh_dados_tratados_completos.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
+
+
+                # --- Visualização da aba "Rotas" no Streamlit ---
+                    import io
+                    
+                    st.markdown("### Visualização da aba 'Rotas'")
+                    rotas_df = pd.read_excel(io.BytesIO(data), sheet_name="Rotas")
+                    st.dataframe(rotas_df, use_container_width=True)
+
                 else:
                     st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
             except Exception as e:
