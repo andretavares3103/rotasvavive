@@ -8,72 +8,6 @@ import tempfile
 import hashlib
 import urllib.parse
 
-# =================== CONFIG DA SUA URL STREAMLIT ===================
-APP_URL = "https://vavive-rotas.streamlit.app/"
-
-# =================== GERAR LINK DE ACEITE ===================
-def gerar_link_aceite(os_id, cliente_nome):
-    chave = f"{os_id}_{cliente_nome}"
-    token = hashlib.sha256(chave.encode()).hexdigest()[:10]
-    params = urllib.parse.urlencode({
-        "os": os_id,
-        "cliente": cliente_nome,
-        "token": token
-    })
-    return f"{APP_URL}?{params}"
-
-# =================== PÁGINA DE FORMULÁRIO DE ACEITE ===================
-def pagina_aceite():
-    st.set_page_config(page_title="Aceite de Atendimento", layout="centered")
-    st.title("Confirmação de Atendimento Vavivê")
-    query_params = st.query_params
-    os_id = query_params.get("os")
-    cliente_nome = query_params.get("cliente")
-    token = query_params.get("token")
-    if not os_id or not cliente_nome or not token:
-        st.error("Link inválido. Parâmetros ausentes.")
-        st.stop()
-    os_id = os_id[0] if isinstance(os_id, list) else os_id
-    cliente_nome = cliente_nome[0] if isinstance(cliente_nome, list) else cliente_nome
-    token = token[0] if isinstance(token, list) else token
-
-    st.markdown(f"""
-    ### Olá!
-
-    Você foi indicada para o atendimento de código **{os_id}** para o cliente **{cliente_nome}**.
-
-    Por favor, confirme se pode assumir este atendimento preenchendo os dados abaixo.
-    """)
-
-    with st.form("aceite_form"):
-        nome_completo = st.text_input("Seu nome completo")
-        telefone = st.text_input("Seu telefone (WhatsApp)")
-        resposta = st.radio("Você pode assumir este atendimento?", ["SIM", "NÃO"])
-        submitted = st.form_submit_button("Enviar resposta")
-
-        if submitted:
-            resposta_df = pd.DataFrame([{
-                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "OS": os_id,
-                "Cliente": cliente_nome,
-                "Nome Digitado": nome_completo,
-                "Telefone": telefone,
-                "Aceite": resposta,
-                "Token Recebido": token
-            }])
-            path_excel = "respostas_aceite.xlsx"
-            if os.path.exists(path_excel):
-                existing = pd.read_excel(path_excel)
-                resposta_df = pd.concat([existing, resposta_df], ignore_index=True)
-            resposta_df.to_excel(path_excel, index=False)
-            st.success("✅ Sua resposta foi registrada com sucesso! Obrigado.")
-            st.stop()
-
-if any(x in st.query_params for x in ["os", "cliente", "token"]):
-    pagina_aceite()
-    st.stop()
-
-# =================== APP PRINCIPAL ===================
 st.set_page_config(page_title="Otimização Rotas Vavivê", layout="wide")
 st.title("Otimização de Rotas Vavivê")
 st.write("Faça upload do Excel original para gerar todos os dados tratados automaticamente.")
@@ -89,7 +23,7 @@ def padronizar_cpf_cnpj(coluna):
     return (
         coluna.astype(str)
         .str.replace(r'\D', '', regex=True)
-        .str.zfill(11)
+        .str.zfill(11)  # Se só CPF, use 11; se também CNPJ, use 14
         .str.strip()
     )
 
@@ -97,8 +31,22 @@ def salvar_df(df, nome_arquivo, output_dir):
     caminho = os.path.join(output_dir, f"{nome_arquivo}.xlsx")
     df.to_excel(caminho, index=False)
 
-def gerar_mensagem_padrao(nome_cliente, data_servico, servico, duracao, rua, numero, complemento,
-                          bairro, cidade, latitude, longitude, hora_entrada, obs_prestador, os_id, link_aceite):
+# Função para gerar link de aceite único (apenas por OS e Cliente)
+def gerar_link_aceite(os_id, cliente_nome):
+    chave = f"{os_id}_{cliente_nome}".encode()
+    token = hashlib.sha256(chave).hexdigest()[:12]
+    # Troque pela sua URL real do app caso deseje
+    base_url = "https://seu-app.streamlit.app/"
+    params = urllib.parse.urlencode({
+        "os": os_id,
+        "cliente": cliente_nome,
+        "token": token
+    })
+    return f"{base_url}?aceite=1&{params}"
+
+# Função para gerar mensagem única por atendimento
+def gerar_mensagem_convocacao(cliente_nome, data_servico, servico, duracao, rua, numero, complemento,
+                              bairro, cidade, latitude, longitude, hora_entrada, obs_prestador, os_id, link_aceite):
     if isinstance(data_servico, str):
         data_dt = pd.to_datetime(data_servico, dayfirst=True, errors="coerce")
     else:
@@ -109,20 +57,13 @@ def gerar_mensagem_padrao(nome_cliente, data_servico, servico, duracao, rua, num
     else:
         dia_semana = traduzir_dia_semana(data_dt)
         data_formatada = data_dt.strftime("%d/%m/%Y")
-    data_linha = f"{dia_semana}, {data_formatada}"
     endereco_str = f"{rua}, {numero}"
     if complemento and str(complemento).strip().lower() not in ["nan", "none", "-"]:
         endereco_str += f", {complemento}"
-    if pd.notnull(latitude) and pd.notnull(longitude):
-        maps_url = f"https://maps.google.com/?q={latitude},{longitude}"
-    else:
-        maps_url = ""
-    mensagem = f"""Olá, tudo bem?
-
-Temos uma oportunidade especial para você nesta região! Quer assumir essa demanda? Está dentro da sua rota!
-
-*Cliente:* {nome_cliente}
-📅 *Data:* {data_linha}
+    maps_url = f"https://maps.google.com/?q={latitude},{longitude}" if pd.notnull(latitude) and pd.notnull(longitude) else ""
+    mensagem = f"""Olá! Temos um atendimento para você:
+*Cliente:* {cliente_nome}
+📅 *Data:* {dia_semana}, {data_formatada}
 🛠️ *Serviço:* {servico}
 🕒 *Hora de entrada:* {hora_entrada}
 ⏱️ *Duração do Atendimento:* {duracao}
@@ -130,16 +71,9 @@ Temos uma oportunidade especial para você nesta região! Quer assumir essa dema
 📍 *Bairro:* {bairro}
 🏙️ *Cidade:* {cidade}
 💬 *Observações do Atendimento:* {obs_prestador}
-*LINK DO GOOGLE MAPAS*
-{"🌎 [Abrir no Google Mapas](" + maps_url + ")" if maps_url else ""}
-
----
-
-📲 *Clique aqui para aceitar ou recusar este atendimento:* [Formulário de Aceite]({link_aceite})
-
-O atendimento será confirmado após o aceite do atendimento, nome e observações do cliente.
-
-Abs, Vavivê!
+{"🌎 [Google Maps](" + maps_url + ")" if maps_url else ""}
+👇 *Clique para aceitar ou recusar:*  
+{link_aceite}
 """
     return mensagem
 
@@ -308,51 +242,143 @@ def pipeline(file_path, output_dir):
     )
     salvar_df(df_atendimentos, "df_atendimentos", output_dir)
 
-    # ============= ATENDIMENTOS FUTUROS ==================
+    hoje = datetime.now().date()
+    limite = hoje - timedelta(days=60)
+    data1_datetime = pd.to_datetime(df_atendimentos["Data 1"], errors="coerce")
+    df_historico_60_dias = df_atendimentos[
+        (df_atendimentos["Status Serviço"].str.lower() != "cancelado") &
+        (data1_datetime.dt.date < hoje) &
+        (data1_datetime.dt.date >= limite)
+    ].copy()
+    df_historico_60_dias = df_historico_60_dias[[
+        "CPF_CNPJ","Cliente","Data 1","Status Serviço","Serviço",
+        "Duração do Serviço","Hora de entrada","ID Prestador","Prestador", "Observações prestador"
+    ]]
+    salvar_df(df_historico_60_dias, "df_historico_60_dias", output_dir)
+
+    # Cliente x Prestador histórico
+    df_cliente_prestador = df_historico_60_dias.groupby(
+        ["CPF_CNPJ","ID Prestador"]
+    ).size().reset_index(name="Qtd Atendimentos Cliente-Prestador")
+    salvar_df(df_cliente_prestador, "df_cliente_prestador", output_dir)
+
+    # Qtd atendimentos por prestador histórico
+    df_qtd_por_prestador = df_historico_60_dias.groupby(
+        "ID Prestador"
+    ).size().reset_index(name="Qtd Atendimentos Prestador")
+    salvar_df(df_qtd_por_prestador, "df_qtd_por_prestador", output_dir)
+
+    # ============= DISTANCIAS ==================
+    df_clientes_coord = df_clientes[["CPF_CNPJ","Latitude Cliente","Longitude Cliente"]].dropna().drop_duplicates("CPF_CNPJ")
+    df_profissionais_coord = df_profissionais[["ID Prestador","Latitude Profissional","Longitude Profissional"]].dropna().drop_duplicates("ID Prestador")
+
+    distancias = []
+    for _, cliente in df_clientes_coord.iterrows():
+        coord_cliente = (cliente["Latitude Cliente"], cliente["Longitude Cliente"])
+        for _, profissional in df_profissionais_coord.iterrows():
+            coord_prof = (profissional["Latitude Profissional"], profissional["Longitude Profissional"])
+            distancia_km = round(geodesic(coord_cliente, coord_prof).km, 2)
+            distancias.append({
+                "CPF_CNPJ": cliente["CPF_CNPJ"],
+                "ID Prestador": profissional["ID Prestador"],
+                "Distância (km)": distancia_km
+            })
+    df_distancias = pd.DataFrame(distancias)
+    df_distancias_alerta = df_distancias[df_distancias["Distância (km)"] > 1000]
+    salvar_df(df_distancias_alerta, "df_distancias_alerta", output_dir)
+    salvar_df(df_distancias, "df_distancias", output_dir)
+
+    # ============= JOIN PREFERENCIAS/BLOQUEIO COORDS ==================
+    df_preferencias_completo = df_preferencias.merge(
+        df_clientes_coord, on="CPF_CNPJ", how="left"
+    ).merge(
+        df_profissionais_coord, on="ID Prestador", how="left"
+    )
+    df_preferencias_completo = df_preferencias_completo[[
+        "CPF_CNPJ","Nome Cliente","ID Prestador","Nome Prestador",
+        "Latitude Cliente","Longitude Cliente",
+        "Latitude Profissional","Longitude Profissional"
+    ]]
+    salvar_df(df_preferencias_completo, "df_preferencias_completo", output_dir)
+
+    df_bloqueio_completo = df_bloqueio.merge(
+        df_clientes_coord, on="CPF_CNPJ", how="left"
+    ).merge(
+        df_profissionais_coord, on="ID Prestador", how="left"
+    )
+    df_bloqueio_completo = df_bloqueio_completo[[
+        "CPF_CNPJ","Nome Cliente","ID Prestador","Nome Prestador",
+        "Latitude Cliente","Longitude Cliente",
+        "Latitude Profissional","Longitude Profissional"
+    ]]
+    salvar_df(df_bloqueio_completo, "df_bloqueio_completo", output_dir)
+
+    # ============= ATEND FUTURO ==================
     ontem = datetime.now().date() - timedelta(days=1)
     df_futuros = df_atendimentos[
         (df_atendimentos["Status Serviço"].str.lower() != "cancelado") &
         (df_atendimentos["Data 1"].dt.date > ontem)
     ].copy()
+    df_futuros_com_clientes = df_futuros.merge(
+        df_clientes_coord, on="CPF_CNPJ", how="left"
+    )
+    colunas_uteis = [
+        "OS","Data 1","Status Serviço","CPF_CNPJ","Cliente","Serviço",
+        "Duração do Serviço","Hora de entrada","Ponto de Referencia",
+        "ID Prestador","Prestador","Latitude Cliente","Longitude Cliente","Plano", "Observações prestador"
+    ]
+    df_atendimentos_futuros_validos = df_futuros_com_clientes[
+        df_futuros_com_clientes["Latitude Cliente"].notnull() &
+        df_futuros_com_clientes["Longitude Cliente"].notnull()
+    ][colunas_uteis].copy()
+    salvar_df(df_atendimentos_futuros_validos, "df_atendimentos_futuros_validos", output_dir)
 
-    matriz_resultado = []
-    for _, row in df_futuros.iterrows():
-        os_id = row["OS"]
-        cliente_nome = row["Cliente"]
-        data_1 = row["Data 1"]
-        servico = row["Serviço"]
-        duracao = row["Horas de serviço"]
-        hora_entrada = row["Hora de entrada"]
-        obs_prestador = row.get("Observações prestador", "")
-        plano = row.get("Plano", "")
-        ponto_ref = row.get("Ponto de Referencia", "")
-        cli = df_clientes[df_clientes["Nome Cliente"] == cliente_nome]
-        if not cli.empty:
-            rua = cli.iloc[0]["Rua"]
-            numero = cli.iloc[0]["Número"]
-            complemento = cli.iloc[0]["Complemento"]
-            bairro = cli.iloc[0]["Bairro"]
-            cidade = cli.iloc[0]["Cidade"]
-            latitude = cli.iloc[0]["Latitude Cliente"]
-            longitude = cli.iloc[0]["Longitude Cliente"]
+    df_atendimentos_sem_localizacao = df_futuros_com_clientes[
+        df_futuros_com_clientes["Latitude Cliente"].isnull() |
+        df_futuros_com_clientes["Longitude Cliente"].isnull()
+    ][colunas_uteis].copy()
+    salvar_df(df_atendimentos_sem_localizacao, "df_atendimentos_sem_localizacao", output_dir)
+
+    # ========== ADICIONA MENSAGEM PADRÃO ÚNICA COM LINK DE ACEITE ==========
+    matriz_resultado_corrigida = []
+    for _, atendimento in df_atendimentos_futuros_validos.iterrows():
+        os_id = atendimento["OS"]
+        cliente_nome = atendimento["Cliente"]
+        data_1 = atendimento["Data 1"]
+        servico = atendimento["Serviço"]
+        plano = atendimento.get("Plano", "")
+        duracao_servico = atendimento["Duração do Serviço"]
+        hora_entrada = atendimento["Hora de entrada"]
+        obs_prestador = atendimento["Observações prestador"]
+        ponto_referencia = atendimento["Ponto de Referencia"]
+        lat_cliente = atendimento["Latitude Cliente"]
+        lon_cliente = atendimento["Longitude Cliente"]
+
+        cliente_info = df_clientes[df_clientes["CPF_CNPJ"] == atendimento["CPF_CNPJ"]]
+        if not cliente_info.empty:
+            rua = cliente_info.iloc[0]["Rua"]
+            numero = cliente_info.iloc[0]["Número"]
+            complemento = cliente_info.iloc[0]["Complemento"]
+            bairro = cliente_info.iloc[0]["Bairro"]
+            cidade = cliente_info.iloc[0]["Cidade"]
+            latitude = cliente_info.iloc[0]["Latitude Cliente"]
+            longitude = cliente_info.iloc[0]["Longitude Cliente"]
         else:
             rua = numero = complemento = bairro = cidade = latitude = longitude = ""
+        
         link_aceite = gerar_link_aceite(os_id, cliente_nome)
-        mensagem = gerar_mensagem_padrao(cliente_nome, data_1, servico, duracao, rua, numero, complemento,
-                                         bairro, cidade, latitude, longitude, hora_entrada, obs_prestador, os_id, link_aceite)
-        matriz_resultado.append({
-            "OS": os_id,
-            "Nome Cliente": cliente_nome,
-            "Data 1": data_1,
-            "Serviço": servico,
-            "Plano": plano,
-            "Duração do Serviço": duracao,
-            "Hora de entrada": hora_entrada,
-            "Ponto de Referencia": ponto_ref,
-            "Mensagem de Convocação": mensagem
-        })
+        mensagem_convocacao = gerar_mensagem_convocacao(
+            cliente_nome, data_1, servico, duracao_servico, rua, numero, complemento,
+            bairro, cidade, latitude, longitude, hora_entrada, obs_prestador, os_id, link_aceite
+        )
 
-    df_matriz_rotas = pd.DataFrame(matriz_resultado)
+        linha = dict(atendimento)
+        linha["Mensagem Padrão"] = mensagem_convocacao
+        matriz_resultado_corrigida.append(linha)
+
+    df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
+
+    # Exportação final igual ao seu código original
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
     with pd.ExcelWriter(final_path, engine='xlsxwriter') as writer:
         df_matriz_rotas.to_excel(writer, sheet_name="Rotas", index=False)
@@ -363,6 +389,15 @@ def pipeline(file_path, output_dir):
         df_bloqueio.to_excel(writer, sheet_name="Bloqueio", index=False)
         df_queridinhos.to_excel(writer, sheet_name="Queridinhos", index=False)
         df_sumidinhos.to_excel(writer, sheet_name="Sumidinhos", index=False)
+        df_historico_60_dias.to_excel(writer, sheet_name="Historico 60 dias", index=False)
+        df_cliente_prestador.to_excel(writer, sheet_name="Cliente x Prestador", index=False)
+        df_qtd_por_prestador.to_excel(writer, sheet_name="Qtd por Prestador", index=False)
+        df_distancias.to_excel(writer, sheet_name="Distancias", index=False)
+        df_preferencias_completo.to_excel(writer, sheet_name="Preferencias Geo", index=False)
+        df_bloqueio_completo.to_excel(writer, sheet_name="Bloqueios Geo", index=False)
+        df_atendimentos_futuros_validos.to_excel(writer, sheet_name="Atend Futuros OK", index=False)
+        df_atendimentos_sem_localizacao.to_excel(writer, sheet_name="Atend Futuros Sem Loc", index=False)
+        df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
 uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
