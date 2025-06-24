@@ -845,6 +845,14 @@ def gerar_link_aceite(os_id, prof_id=None, prof_nome=None):
         ])
     df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
 
+    # [AQUI] Inclua as linhas de debug:
+    st.write(f"Tentando salvar arquivo em: {final_path}")
+    st.write(f"df_matriz_rotas shape: {df_matriz_rotas.shape}")
+    if df_matriz_rotas.empty:
+        st.error("DataFrame de rotas está vazio!")
+
+
+    
     # Exemplo do final:
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
     with pd.ExcelWriter(final_path, engine='xlsxwriter') as writer:
