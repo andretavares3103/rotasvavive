@@ -12,8 +12,8 @@ import urllib.parse
 def gerar_link_aceite(os_id, prof_id, prof_nome):
     chave = f"{os_id}_{prof_id}"
     token = hashlib.sha256(chave.encode()).hexdigest()[:10]
-    # Troque para a URL real do seu app Streamlit Cloud (sem "/?"):
-    base_url = st.secrets.get("ACEITE_BASE_URL", st.request.url)
+    # Troque abaixo pela sua URL real do app!
+    base_url = st.secrets.get("ACEITE_BASE_URL", "https://SEU-APP.streamlit.app/")
     params = urllib.parse.urlencode({
         "os": os_id,
         "prof_id": prof_id,
@@ -21,6 +21,7 @@ def gerar_link_aceite(os_id, prof_id, prof_nome):
         "token": token
     })
     return f"{base_url}?{params}"
+
 
 # =============== ACEITE: Página/Formulário ================
 def pagina_aceite():
