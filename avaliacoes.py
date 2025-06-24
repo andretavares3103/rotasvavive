@@ -1,4 +1,3 @@
-ULTIMO CODIGO FUNCIONANDO
 
 import streamlit as st
 import pandas as pd
