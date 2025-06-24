@@ -868,6 +868,10 @@ def gerar_link_aceite(os_id, prof_id=None, prof_nome=None):
         # ...salva os outros DataFrames aqui também, se quiser
     return final_path
 
+    if not os.path.exists(final_path):
+        raise FileNotFoundError(f"Arquivo final não foi encontrado no caminho: {final_path}")
+    return final_path
+
 uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
 
 if uploaded_file:
@@ -878,7 +882,11 @@ if uploaded_file:
                 f.write(uploaded_file.read())
             try:
                 excel_path = pipeline(temp_path, tempdir)
-                if os.path.exists(excel_path):
+
+                # Proteção extra: cheque se o caminho é válido e o arquivo existe
+                if not excel_path or not os.path.exists(excel_path):
+                    st.error(f"Arquivo final não encontrado. Algo deu errado no processamento. Caminho retornado: {excel_path}")
+                else:
                     with open(excel_path, "rb") as f:
                         data = f.read()
                     st.success("Processamento finalizado com sucesso!")
@@ -888,19 +896,13 @@ if uploaded_file:
                         file_name="rotas_bh_dados_tratados_completos.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
-
-
-                # --- Visualização da aba "Rotas" no Streamlit ---
                     import io
-                    
                     st.markdown("### Visualização da aba 'Rotas'")
                     rotas_df = pd.read_excel(io.BytesIO(data), sheet_name="Rotas")
                     st.dataframe(rotas_df, use_container_width=True)
-
-                else:
-                    st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
             except Exception as e:
                 st.error(f"Erro no processamento: {e}")
+
                 
 if st.sidebar.button("Visualizar Aceites"):
     ACEITES_PATH = "aceites.xlsx"
