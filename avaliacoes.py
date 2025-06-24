@@ -15,7 +15,7 @@ from urllib.parse import parse_qs
 
 def render_aceite_page():
     st.title("Confirmação de Aceite de Atendimento")
-    query_params = st.experimental_get_query_params()
+    query_params = st.query_params
     os_id = query_params.get("os", [""])[0]
     prof_id = query_params.get("prof_id", [""])[0]
     prof_nome = query_params.get("prof_nome", [""])[0]
@@ -55,7 +55,7 @@ def render_aceite_page():
         st.stop()
 
 # Logo depois de definir a função:
-if "aceite" in st.experimental_get_query_params():
+if "aceite" in st.query_params:
     render_aceite_page()
     st.stop()
 
