@@ -14,8 +14,45 @@ import urllib.parse
 from urllib.parse import parse_qs
 
 def render_aceite_page():
-    # ... (código igual ao do bloco anterior)
-    # Veja bloco 4 da mensagem anterior, copie tudo aqui!
+    st.title("Confirmação de Aceite de Atendimento")
+    query_params = st.experimental_get_query_params()
+    os_id = query_params.get("os", [""])[0]
+    prof_id = query_params.get("prof_id", [""])[0]
+    prof_nome = query_params.get("prof_nome", [""])[0]
+    token = query_params.get("token", [""])[0]
+    chave = f"{os_id}_{prof_id}"
+    token_ok = hashlib.sha256(chave.encode()).hexdigest()[:10] == token
+
+    if not (os_id and prof_id and prof_nome and token and token_ok):
+        st.error("Link de aceite inválido ou expirado.")
+        st.stop()
+
+    st.write(f"Profissional: **{prof_nome}**  \nOS: **{os_id}**")
+    aceite = st.radio("Você aceita este atendimento?", ["Sim", "Não"])
+    nome = st.text_input("Seu nome completo*")
+    telefone = st.text_input("Seu telefone (WhatsApp)*")
+
+    if st.button("Enviar resposta"):
+        if not nome or not telefone:
+            st.warning("Preencha nome e telefone para prosseguir.")
+            st.stop()
+        novo_registro = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "os": os_id,
+            "prof_id": prof_id,
+            "prof_nome": prof_nome,
+            "nome": nome,
+            "telefone": telefone,
+            "aceite": aceite,
+        }
+        if os.path.exists(ACEITES_PATH):
+            df_existente = pd.read_excel(ACEITES_PATH)
+            df_final = pd.concat([df_existente, pd.DataFrame([novo_registro])], ignore_index=True)
+        else:
+            df_final = pd.DataFrame([novo_registro])
+        df_final.to_excel(ACEITES_PATH, index=False)
+        st.success("Resposta registrada com sucesso! Obrigado 🙂")
+        st.stop()
 
 # Logo depois de definir a função:
 if "aceite" in st.experimental_get_query_params():
