@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -6,6 +5,82 @@ import os
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 import tempfile
+import hashlib
+import urllib.parse
+
+# =============== ACEITE: Função do Link ================
+def gerar_link_aceite(os_id, prof_id, prof_nome):
+    chave = f"{os_id}_{prof_id}"
+    token = hashlib.sha256(chave.encode()).hexdigest()[:10]
+    # Troque para a URL real do seu app Streamlit Cloud (sem "/?"):
+    base_url = st.secrets.get("ACEITE_BASE_URL", st.request.url)
+    params = urllib.parse.urlencode({
+        "os": os_id,
+        "prof_id": prof_id,
+        "prof_nome": prof_nome,
+        "token": token
+    })
+    return f"{base_url}?{params}"
+
+# =============== ACEITE: Página/Formulário ================
+def pagina_aceite():
+    st.set_page_config(page_title="Aceite de Atendimento", layout="centered")
+    st.title("Confirmação de Atendimento Vavivê")
+
+    query_params = st.query_params
+    os_id = query_params.get("os")
+    prof_id = query_params.get("prof_id")
+    prof_nome = query_params.get("prof_nome")
+    token = query_params.get("token")
+
+    if not os_id or not prof_id or not prof_nome or not token:
+        st.error("Link inválido. Parâmetros ausentes.")
+        st.stop()
+    os_id = os_id[0] if isinstance(os_id, list) else os_id
+    prof_id = prof_id[0] if isinstance(prof_id, list) else prof_id
+    prof_nome = prof_nome[0] if isinstance(prof_nome, list) else prof_nome
+    token = token[0] if isinstance(token, list) else token
+
+    st.markdown(f"""
+    ### Olá {prof_nome}!
+
+    Você foi indicada para o atendimento de código *{os_id}*.
+
+    Por favor, confirme se pode assumir este atendimento preenchendo os dados abaixo.
+    """)
+
+    with st.form("aceite_form"):
+        nome_completo = st.text_input("Seu nome completo")
+        telefone = st.text_input("Seu telefone (WhatsApp)")
+        resposta = st.radio("Você pode assumir este atendimento?", ["SIM", "NÃO"])
+        submitted = st.form_submit_button("Enviar resposta")
+
+        if submitted:
+            resposta_df = pd.DataFrame([{
+                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "OS": os_id,
+                "ID Profissional": prof_id,
+                "Nome Profissional": prof_nome,
+                "Nome Digitado": nome_completo,
+                "Telefone": telefone,
+                "Aceite": resposta,
+                "Token Recebido": token
+            }])
+
+            path_excel = "respostas_aceite.xlsx"
+            if os.path.exists(path_excel):
+                existing = pd.read_excel(path_excel)
+                resposta_df = pd.concat([existing, resposta_df], ignore_index=True)
+            resposta_df.to_excel(path_excel, index=False)
+
+            st.success("✅ Sua resposta foi registrada com sucesso! Obrigado.")
+
+# =============== ACEITE: Switch entre Portal/Pipeline e Aceite ================
+if any(x in st.query_params for x in ["os", "prof_id", "prof_nome", "token"]):
+    pagina_aceite()
+    st.stop()
+
+# =============== PIPELINE ORIGINAL E FUNÇÕES ================
 
 st.set_page_config(page_title="Otimização Rotas Vavivê", layout="wide")
 st.title("Otimização de Rotas Vavivê")
@@ -30,7 +105,7 @@ def formatar_nome_simples(nome):
 def gerar_mensagem_personalizada(
     nome_profissional, nome_cliente, data_servico, servico,
     duracao, rua, numero, complemento, bairro, cidade, latitude, longitude,
-    ja_atendeu, hora_entrada, obs_prestador 
+    ja_atendeu, hora_entrada, obs_prestador, os_id, prof_id
 ):
     nome_profissional_fmt = formatar_nome_simples(nome_profissional)
     nome_cliente_fmt = nome_cliente.split()[0].strip().title()
@@ -59,23 +134,25 @@ def gerar_mensagem_personalizada(
     )
     rodape = (
         "O atendimento será confirmado após o aceite do atendimento, Nome e observações do cliente. Ok?\n\n"
-        "Lembre que o cliente irá receber o *profissional indicado pela Vavivê*. Lembre-se das nossas 3 confirmações do atendimento!\n\n"
-        "*CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO\n\n*"
+        "Lembre que o cliente irá receber o profissional indicado pela Vavivê. Lembre-se das nossas 3 confirmações do atendimento!\n\n"
+        "CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO\n\n"
         "Abs, Vavivê!"
     )
+    link_aceite = gerar_link_aceite(os_id, prof_id, nome_profissional)
     mensagem = f"""Olá, Tudo bem com você?
 Temos uma oportunidade especial para você nesta região! Quer assumir essa demanda? Está dentro da sua rota!
-*Cliente:* {nome_cliente_fmt}
-📅 *Data:* {data_linha}
-🛠️ *Serviço:* {servico}
-🕒 *Hora de entrada:* {hora_entrada}
-⏱️ *Duração do Atendimento:* {duracao}
-📍 *Endereço:* {endereco_str}
-📍 *Bairro:* {bairro}
-🏙️ *Cidade:* {cidade}
-💬 *Observações do Atendimento:* {obs_prestador}
-*LINK DO GOOGLE MAPAS*
+Cliente: {nome_cliente_fmt}
+📅 Data: {data_linha}
+🛠️ Serviço: {servico}
+🕒 Hora de entrada: {hora_entrada}
+⏱️ Duração do Atendimento: {duracao}
+📍 Endereço: {endereco_str}
+📍 Bairro: {bairro}
+🏙️ Cidade: {cidade}
+💬 Observações do Atendimento: {obs_prestador}
+LINK DO GOOGLE MAPAS
 {"🌎 [Abrir no Google Mapas](" + maps_url + ")" if maps_url else ""}
+📲 Clique aqui para aceitar ou recusar: [Formulário de Aceite]({link_aceite})
 {fechamento}
 {rodape}
 """
@@ -95,6 +172,9 @@ def salvar_df(df, nome_arquivo, output_dir):
 
 def pipeline(file_path, output_dir):
     import xlsxwriter
+
+
+
 
     # ============= ABA CLIENTES ==================
     df_clientes_raw = pd.read_excel(file_path, sheet_name="Clientes")
@@ -375,14 +455,13 @@ def pipeline(file_path, output_dir):
 
     # ====================== MATRIZ ROTAS - Bloco Corrigido ======================
     matriz_resultado_corrigida = []
-    
-    preferidas_alocadas_dia = dict()  # {data: set de ids já alocadas como preferidas naquele dia}
-    
+    preferidas_alocadas_dia = dict()
+
     for _, atendimento in df_atendimentos_futuros_validos.iterrows():
         data_atendimento = atendimento["Data 1"].date()
         if data_atendimento not in preferidas_alocadas_dia:
             preferidas_alocadas_dia[data_atendimento] = set()
-    
+
         os_id = atendimento["OS"]
         cpf = atendimento["CPF_CNPJ"]
         nome_cliente = atendimento["Cliente"]
@@ -395,12 +474,12 @@ def pipeline(file_path, output_dir):
         lat_cliente = atendimento["Latitude Cliente"]
         lon_cliente = atendimento["Longitude Cliente"]
         plano = atendimento.get("Plano", "")
-    
+
         bloqueados = (
             df_bloqueio_completo[df_bloqueio_completo["CPF_CNPJ"] == cpf]["ID Prestador"]
             .astype(str).str.strip().tolist()
         )
-    
+
         linha = {
             "OS": os_id,
             "CPF_CNPJ": cpf,
@@ -413,7 +492,7 @@ def pipeline(file_path, output_dir):
             "Observações prestador": obs_prestador,
             "Ponto de Referencia": ponto_referencia
         }
-    
+
         cliente_match = df_clientes[df_clientes["CPF_CNPJ"] == cpf]
         cliente_info = cliente_match.iloc[0] if not cliente_match.empty else None
         if cliente_info is not None:
@@ -426,19 +505,18 @@ def pipeline(file_path, output_dir):
             longitude = cliente_info["Longitude Cliente"]
         else:
             rua = numero = complemento = bairro = cidade = latitude = longitude = ""
-    
+
         linha["Mensagem Padrão"] = gerar_mensagem_personalizada(
-            "PROFISSIONAL",
-            nome_cliente, data_1, servico,
+            "PROFISSIONAL", nome_cliente, data_1, servico,
             duracao_servico, rua, numero, complemento, bairro, cidade,
             latitude, longitude, ja_atendeu=False,
-            hora_entrada=hora_entrada, 
-            obs_prestador=obs_prestador
+            hora_entrada=hora_entrada, obs_prestador=obs_prestador,
+            os_id=os_id, prof_id="PROFISSIONAL"
         )
-    
+
         utilizados = set()
         col = 1
-    
+
         # 1. Preferência do cliente (NÃO repete no mesmo dia)
         preferencia_cliente_df = df_preferencias_completo[df_preferencias_completo["CPF_CNPJ"] == cpf]
         preferida_id = None
@@ -451,7 +529,7 @@ def pipeline(file_path, output_dir):
                 and pd.notnull(profissional_preferida_info.iloc[0]["Latitude Profissional"])
                 and pd.notnull(profissional_preferida_info.iloc[0]["Longitude Profissional"])
                 and "inativo" not in profissional_preferida_info.iloc[0]["Nome Prestador"].lower()
-                and id_preferida_temp not in preferidas_alocadas_dia[data_atendimento]  # NOVA REGRA
+                and id_preferida_temp not in preferidas_alocadas_dia[data_atendimento]
             ):
                 preferida_id = id_preferida_temp
                 nome_prof = profissional_preferida_info.iloc[0]["Nome Prestador"]
@@ -480,8 +558,8 @@ def pipeline(file_path, output_dir):
                     nome_prof, nome_cliente, data_1, servico,
                     duracao_servico, rua, numero, complemento, bairro, cidade,
                     latitude, longitude, ja_atendeu=True,
-                    hora_entrada=hora_entrada,
-                    obs_prestador=obs_prestador
+                    hora_entrada=hora_entrada, obs_prestador=obs_prestador,
+                    os_id=os_id, prof_id=preferida_id
                 )
                 linha[f"Critério Utilizado {col}"] = "Preferência do Cliente"
                 utilizados.add(preferida_id)
@@ -748,7 +826,6 @@ def pipeline(file_path, output_dir):
     return final_path
 
 uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
-
 if uploaded_file:
     with st.spinner("Processando... Isso pode levar alguns segundos."):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -767,23 +844,17 @@ if uploaded_file:
                         file_name="rotas_bh_dados_tratados_completos.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
-
-
-                # --- Visualização da aba "Rotas" no Streamlit ---
                     import io
-                    
                     st.markdown("### Visualização da aba 'Rotas'")
                     rotas_df = pd.read_excel(io.BytesIO(data), sheet_name="Rotas")
                     st.dataframe(rotas_df, use_container_width=True)
-
                 else:
                     st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
             except Exception as e:
                 st.error(f"Erro no processamento: {e}")
 
-
 st.markdown("""
 ---
-> **Observação:** Os arquivos processados ficam disponíveis para download logo após a execução.  
+> *Observação:* Os arquivos processados ficam disponíveis para download logo após a execução.  
 > Para dúvidas ou adaptações, fale com o suporte!
 """)
