@@ -68,7 +68,7 @@ def gerar_token(os_id):
 
 def gerar_link_aceite(os_id):
     # Use seu domínio do Streamlit Cloud, exemplo: https://seu-app.streamlit.app/
-    base_url = st.secrets.get("ACEITE_BASE_URL", "") or "https://SEU-APP-STREAMLIT-URL"
+    base_url = st.secrets.get("ACEITE_BASE_URL", "") or "https://rotasvavive.streamlit.app/"
     token = gerar_token(os_id)
     params = urllib.parse.urlencode({
         "aceite": 1,
