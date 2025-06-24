@@ -6,6 +6,41 @@ import os
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 import tempfile
+import hashlib
+import urllib.parse
+
+
+
+from urllib.parse import parse_qs
+
+def render_aceite_page():
+    # ... (código igual ao do bloco anterior)
+    # Veja bloco 4 da mensagem anterior, copie tudo aqui!
+
+# Logo depois de definir a função:
+if "aceite" in st.experimental_get_query_params():
+    render_aceite_page()
+    st.stop()
+
+
+
+
+def gerar_token(os_id):
+    chave = f"vavive_{os_id}".encode()
+    return hashlib.sha256(chave).hexdigest()[:12]
+
+def gerar_link_aceite(os_id):
+    # Use seu domínio do Streamlit Cloud, exemplo: https://seu-app.streamlit.app/
+    base_url = st.secrets.get("ACEITE_BASE_URL", "") or "https://SEU-APP-STREAMLIT-URL"
+    token = gerar_token(os_id)
+    params = urllib.parse.urlencode({
+        "aceite": 1,
+        "os": os_id,
+        "token": token
+    })
+    return f"{base_url}?{params}"
+
+
 
 st.set_page_config(page_title="Otimização Rotas Vavivê", layout="wide")
 st.title("Otimização de Rotas Vavivê")
@@ -378,6 +413,29 @@ def pipeline(file_path, output_dir):
     
     preferidas_alocadas_dia = dict()  # {data: set de ids já alocadas como preferidas naquele dia}
     
+
+# ============ BLOCO 2: Função para gerar link único de aceite ============
+
+import hashlib
+import urllib.parse
+
+def gerar_link_aceite(os_id, prof_id=None, prof_nome=None):
+    chave = f"{os_id}_{prof_id or ''}_{prof_nome or ''}"
+    token = hashlib.sha256(chave.encode()).hexdigest()[:10]
+    # Altere para a URL real do seu app no Streamlit Cloud:
+    base_url = "https://seu-app.streamlit.app/aceite"
+    params = urllib.parse.urlencode({
+        "os": os_id,
+        "prof_id": prof_id or "",
+        "prof_nome": prof_nome or "",
+        "token": token
+    })
+    return f"{base_url}?{params}"
+
+
+    
+    
+    
     for _, atendimento in df_atendimentos_futuros_validos.iterrows():
         data_atendimento = atendimento["Data 1"].date()
         if data_atendimento not in preferidas_alocadas_dia:
@@ -427,7 +485,10 @@ def pipeline(file_path, output_dir):
         else:
             rua = numero = complemento = bairro = cidade = latitude = longitude = ""
     
-        linha["Mensagem Padrão"] = gerar_mensagem_personalizada(
+        # --- GERA LINK DE ACEITE ÚNICO PARA ESSA OS (sem profissional específico) ---
+        link_aceite_padrao = gerar_link_aceite(os_id)
+        
+        mensagem_padrao = gerar_mensagem_personalizada(
             "PROFISSIONAL",
             nome_cliente, data_1, servico,
             duracao_servico, rua, numero, complemento, bairro, cidade,
@@ -435,6 +496,8 @@ def pipeline(file_path, output_dir):
             hora_entrada=hora_entrada, 
             obs_prestador=obs_prestador
         )
+        linha["Mensagem Padrão"] = f"{mensagem_padrao}\n\nClique aqui para aceitar ou recusar: [ACEITAR ATENDIMENTO]({link_aceite_padrao})"
+
     
         utilizados = set()
         col = 1
@@ -476,13 +539,16 @@ def pipeline(file_path, output_dir):
                 linha[f"Critério {col}"] = criterio
                 linha[f"Nome Prestador {col}"] = nome_prof
                 linha[f"Celular {col}"] = celular
-                linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                    nome_prof, nome_cliente, data_1, servico,
+                link_aceite = gerar_link_aceite(os_id, id_prof, prof.iloc[0]["Nome Prestador"])
+                msg = gerar_mensagem_personalizada(
+                    prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
                     duracao_servico, rua, numero, complemento, bairro, cidade,
                     latitude, longitude, ja_atendeu=True,
                     hora_entrada=hora_entrada,
                     obs_prestador=obs_prestador
                 )
+                linha[f"Mensagem {col}"] = f"{msg}\n\nClique aqui para aceitar ou recusar: [ACEITAR ATENDIMENTO]({link_aceite})"
+
                 linha[f"Critério Utilizado {col}"] = "Preferência do Cliente"
                 utilizados.add(preferida_id)
                 preferidas_alocadas_dia[data_atendimento].add(preferida_id)
@@ -513,13 +579,16 @@ def pipeline(file_path, output_dir):
                         linha[f"Critério {col}"] = criterio
                         linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
                         linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-                        linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+                        link_aceite = gerar_link_aceite(os_id, id_prof, prof.iloc[0]["Nome Prestador"])
+                        msg = gerar_mensagem_personalizada(
                             prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
                             duracao_servico, rua, numero, complemento, bairro, cidade,
                             latitude, longitude, ja_atendeu=True,
                             hora_entrada=hora_entrada,
                             obs_prestador=obs_prestador
                         )
+                        linha[f"Mensagem {col}"] = f"{msg}\n\nClique aqui para aceitar ou recusar: [ACEITAR ATENDIMENTO]({link_aceite})"
+
                         linha[f"Critério Utilizado {col}"] = "Mais atendeu o cliente"
                         utilizados.add(id_prof)
                         col += 1
@@ -543,13 +612,16 @@ def pipeline(file_path, output_dir):
                         linha[f"Critério {col}"] = criterio
                         linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
                         linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-                        linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+                        link_aceite = gerar_link_aceite(os_id, id_prof, prof.iloc[0]["Nome Prestador"])
+                        msg = gerar_mensagem_personalizada(
                             prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
                             duracao_servico, rua, numero, complemento, bairro, cidade,
                             latitude, longitude, ja_atendeu=True,
                             hora_entrada=hora_entrada,
                             obs_prestador=obs_prestador
                         )
+                        linha[f"Mensagem {col}"] = f"{msg}\n\nClique aqui para aceitar ou recusar: [ACEITAR ATENDIMENTO]({link_aceite})"
+
                         linha[f"Critério Utilizado {col}"] = "Último profissional que atendeu"
                         utilizados.add(ultimo_prof_id)
                         col += 1
@@ -575,13 +647,16 @@ def pipeline(file_path, output_dir):
                             linha[f"Critério {col}"] = criterio
                             linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
                             linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-                            linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+                            link_aceite = gerar_link_aceite(os_id, id_prof, prof.iloc[0]["Nome Prestador"])
+                            msg = gerar_mensagem_personalizada(
                                 prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
                                 duracao_servico, rua, numero, complemento, bairro, cidade,
-                                latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
+                                latitude, longitude, ja_atendeu=True,
                                 hora_entrada=hora_entrada,
                                 obs_prestador=obs_prestador
                             )
+                            linha[f"Mensagem {col}"] = f"{msg}\n\nClique aqui para aceitar ou recusar: [ACEITAR ATENDIMENTO]({link_aceite})"
+
                             linha[f"Critério Utilizado {col}"] = "Profissional preferencial da plataforma (até 5 km)"
                             utilizados.add(queridinha_id)
                             col += 1
@@ -610,13 +685,16 @@ def pipeline(file_path, output_dir):
             linha[f"Critério {col}"] = criterio
             linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
             linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-            linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+            link_aceite = gerar_link_aceite(os_id, id_prof, prof.iloc[0]["Nome Prestador"])
+            msg = gerar_mensagem_personalizada(
                 prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
                 duracao_servico, rua, numero, complemento, bairro, cidade,
-                latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
+                latitude, longitude, ja_atendeu=True,
                 hora_entrada=hora_entrada,
                 obs_prestador=obs_prestador
             )
+            linha[f"Mensagem {col}"] = f"{msg}\n\nClique aqui para aceitar ou recusar: [ACEITAR ATENDIMENTO]({link_aceite})"
+
             linha[f"Critério Utilizado {col}"] = "Mais próxima geograficamente"
             utilizados.add(str(dist_row["ID Prestador"]))
             col += 1
@@ -645,13 +723,16 @@ def pipeline(file_path, output_dir):
             linha[f"Critério {col}"] = criterio
             linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
             linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-            linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+            link_aceite = gerar_link_aceite(os_id, id_prof, prof.iloc[0]["Nome Prestador"])
+            msg = gerar_mensagem_personalizada(
                 prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
                 duracao_servico, rua, numero, complemento, bairro, cidade,
-                latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
+                latitude, longitude, ja_atendeu=True,
                 hora_entrada=hora_entrada,
                 obs_prestador=obs_prestador
             )
+            linha[f"Mensagem {col}"] = f"{msg}\n\nClique aqui para aceitar ou recusar: [ACEITAR ATENDIMENTO]({link_aceite})"
+
             linha[f"Critério Utilizado {col}"] = "Baixa Disponibilidade"
             col += 1
     
@@ -680,13 +761,16 @@ def pipeline(file_path, output_dir):
                 linha[f"Critério {col}"] = criterio
                 linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
                 linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-                linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+                link_aceite = gerar_link_aceite(os_id, id_prof, prof.iloc[0]["Nome Prestador"])
+                msg = gerar_mensagem_personalizada(
                     prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
                     duracao_servico, rua, numero, complemento, bairro, cidade,
-                    latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
+                    latitude, longitude, ja_atendeu=True,
                     hora_entrada=hora_entrada,
                     obs_prestador=obs_prestador
                 )
+                linha[f"Mensagem {col}"] = f"{msg}\n\nClique aqui para aceitar ou recusar: [ACEITAR ATENDIMENTO]({link_aceite})"
+
                 linha[f"Critério Utilizado {col}"] = "Mais próxima geograficamente (complemento)"
                 col += 1
     
@@ -780,6 +864,16 @@ if uploaded_file:
                     st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
             except Exception as e:
                 st.error(f"Erro no processamento: {e}")
+                
+if st.sidebar.button("Visualizar Aceites"):
+    ACEITES_PATH = "aceites.xlsx"
+    import pandas as pd
+    if os.path.exists(ACEITES_PATH):
+        df_aceites = pd.read_excel(ACEITES_PATH)
+        st.write("## Aceites Recebidos")
+        st.dataframe(df_aceites)
+    else:
+        st.info("Nenhum aceite registrado ainda.")
 
 
 st.markdown("""
