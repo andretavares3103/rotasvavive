@@ -840,16 +840,35 @@ if uploaded_file:
 
 import io
 
-if os.path.exists(ACEITES_FILE):
+ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
+
+if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
+    df_aceites = pd.read_excel(ACEITES_FILE)
+    df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
+
+    # Merge para trazer os dados detalhados
+    df_aceites_completo = pd.merge(
+        df_aceites, df_rotas[
+            ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
+             "Duração do Serviço", "Hora de entrada", "Observações prestador", "Ponto de Referencia"]
+        ],
+        how="left", on="OS"
+    )
+    st.markdown("### Histórico de Aceites (detalhado)")
+    st.dataframe(df_aceites_completo)
+    st.download_button(
+        label="Baixar histórico de aceites (completo)",
+        data=df_aceites_completo.to_excel(index=False),
+        file_name="aceites_completo.xlsx"
+    )
+elif os.path.exists(ACEITES_FILE):
+    # Fallback se não encontrar o rotas consolidado
     st.markdown("### Histórico de Aceites")
     df_aceites = pd.read_excel(ACEITES_FILE)
     st.dataframe(df_aceites)
-    buffer = io.BytesIO()
-    df_aceites.to_excel(buffer, index=False)
-    buffer.seek(0)
     st.download_button(
         label="Baixar histórico de aceites",
-        data=buffer,
+        data=df_aceites.to_excel(index=False),
         file_name="aceites.xlsx"
     )
 
