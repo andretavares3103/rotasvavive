@@ -143,6 +143,14 @@ def salvar_df(df, nome_arquivo, output_dir):
     df.to_excel(caminho, index=False)
 
 
+
+
+
+
+
+
+
+
 ####----------
 
 def pipeline(file_path, output_dir):
@@ -812,11 +820,109 @@ def pipeline(file_path, output_dir):
         # ...salva os outros DataFrames aqui também, se quiser
     return final_path
 
-uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
 
-if uploaded_file:
-    with st.spinner("Processando... Isso pode levar alguns segundos."):
-        with tempfile.TemporaryDirectory() as tempdir:
+
+
+import io
+
+# --- MATRIZ DE ROTAS ---
+with tab_rotas:
+    ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
+    if os.path.exists(ROTAS_FILE):
+        df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
+        st.subheader("Matriz de Rotas")
+        # FILTROS DA MATRIZ DE ROTAS
+        datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
+        data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_rotas")
+        clientes = df_rotas["Nome Cliente"].dropna().unique()
+        cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_rotas")
+        profissionais = []
+        for i in range(1, 21):
+            profissionais.extend(df_rotas[f"Nome Prestador {i}"].dropna().unique())
+        profissionais = list(set([p for p in profissionais if isinstance(p, str)]))
+        profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + profissionais, key="prof_rotas")
+        df_rotas_filt = df_rotas.copy()
+        if data_sel != "Todos":
+            df_rotas_filt = df_rotas_filt[df_rotas_filt["Data 1"].dt.date.astype(str) == data_sel]
+        if cliente_sel != "Todos":
+            df_rotas_filt = df_rotas_filt[df_rotas_filt["Nome Cliente"] == cliente_sel]
+        if profissional_sel != "Todos":
+            mask = False
+            for i in range(1, 21):
+                mask |= (df_rotas_filt[f"Nome Prestador {i}"] == profissional_sel)
+            df_rotas_filt = df_rotas_filt[mask]
+        st.dataframe(df_rotas_filt, use_container_width=True)
+    else:
+        st.info("Gere e baixe a planilha na aba de Upload.")
+
+# --- ACEITES ---
+with tab_aceites:
+    ACEITES_FILE = "aceites.xlsx"
+    if os.path.exists(ACEITES_FILE):
+        df_aceites = pd.read_excel(ACEITES_FILE)
+        if os.path.exists("rotas_bh_dados_tratados_completos.xlsx"):
+            df_rotas = pd.read_excel("rotas_bh_dados_tratados_completos.xlsx", sheet_name="Rotas")
+            df_aceites_completo = pd.merge(
+                df_aceites,
+                df_rotas[
+                    ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
+                     "Duração do Serviço", "Hora de entrada", "Observações prestador", "Ponto de Referencia"]
+                ],
+                how="left", on="OS"
+            )
+            st.subheader("Aceites (detalhado)")
+            st.dataframe(df_aceites_completo)
+            st.download_button(
+                label="Baixar histórico de aceites (completo)",
+                data=df_aceites_completo.to_excel(index=False),
+                file_name="aceites_completo.xlsx"
+            )
+        else:
+            st.subheader("Aceites")
+            st.dataframe(df_aceites)
+            st.download_button(
+                label="Baixar histórico de aceites",
+                data=df_aceites.to_excel(index=False),
+                file_name="aceites.xlsx"
+            )
+    else:
+        st.info("Nenhum aceite registrado ainda.")
+
+
+
+
+
+
+
+
+
+# --- TABS PRINCIPAIS ---
+tab_upload, tab_rotas, tab_aceites = st.tabs(["Upload", "Matriz de Rotas", "Aceites"])
+
+with tab_upload:
+    uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
+    if uploaded_file:
+        with st.spinner("Processando... Isso pode levar alguns segundos."):
+            with tempfile.TemporaryDirectory() as tempdir:
+                temp_path = os.path.join(tempdir, uploaded_file.name)
+                with open(temp_path, "wb") as f:
+                    f.write(uploaded_file.read())
+                try:
+                    excel_path = pipeline(temp_path, tempdir)
+                    if os.path.exists(excel_path):
+                        with open(excel_path, "rb") as f:
+                            data = f.read()
+                        st.success("Processamento finalizado com sucesso!")
+                        st.download_button(
+                            label="📥 Baixar Excel consolidado",
+                            data=data,
+                            file_name="rotas_bh_dados_tratados_completos.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    else:
+                        st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
+                except Exception as e:
+                    st.error(f"Erro no processamento: {e}")
             temp_path = os.path.join(tempdir, uploaded_file.name)
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.read())
