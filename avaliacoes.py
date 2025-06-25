@@ -59,13 +59,17 @@ def gerar_mensagem_personalizada(
         else "Responda com SIM caso tenha disponibilidade!"
     )
     rodape = (
-        "O atendimento será confirmado assim que ocorrer o aceite atrávés do link. Ok?\n\n"
-        "Lembre-se: \n\n"
-            1)    O cliente irá receber o *profissional indicado pela Vavivê*.
-            2)    Lembre-se das nossas 3 confirmações do atendimento!\n\n"
-        "*CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO\n\n*"
-        "Abs, Vavivê!"
-    )
+        """
+        O atendimento será confirmado após o aceite do atendimento, Nome e observações do cliente. Ok?
+        
+        Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
+        2)    Lembre-se das nossas 3 confirmações do atendimento!
+        
+        *CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO*
+        
+        Abs, Vavivê!
+        """
+
     mensagem = f"""Olá, Tudo bem com você?
 Temos uma oportunidade especial para você dentro da sua rota!
 *Cliente:* {nome_cliente_fmt}
