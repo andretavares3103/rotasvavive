@@ -39,9 +39,9 @@ def salvar_aceite(os_id, profissional, telefone, aceitou):
     df.to_excel(ACEITES_FILE, index=False)
 
 # --- Detecta se abriu o app pelo link de aceite ---
-query_params = st.experimental_get_query_params()
-aceite_os = query_params.get("aceite", [None])[0]
+aceite_os = st.query_params.get("aceite", None)
 if aceite_os:
+    # st.query_params devolve sempre uma string ou None
     exibe_formulario_aceite(aceite_os)
     st.stop()
 
