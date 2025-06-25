@@ -838,15 +838,21 @@ if uploaded_file:
             except Exception as e:
                 st.error(f"Erro no processamento: {e}")
 
+import io
+
 if os.path.exists(ACEITES_FILE):
     st.markdown("### Histórico de Aceites")
     df_aceites = pd.read_excel(ACEITES_FILE)
     st.dataframe(df_aceites)
+    buffer = io.BytesIO()
+    df_aceites.to_excel(buffer, index=False)
+    buffer.seek(0)
     st.download_button(
         label="Baixar histórico de aceites",
-        data=df_aceites.to_excel(index=False),
+        data=buffer,
         file_name="aceites.xlsx"
     )
+
 
 st.markdown("""
 ---
