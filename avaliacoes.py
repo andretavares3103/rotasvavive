@@ -59,13 +59,15 @@ def gerar_mensagem_personalizada(
         else "Responda com SIM caso tenha disponibilidade!"
     )
     rodape = (
-        "O atendimento será confirmado após o aceite do atendimento, Nome e observações do cliente. Ok?\n\n"
-        "Lembre que o cliente irá receber o *profissional indicado pela Vavivê*. Lembre-se das nossas 3 confirmações do atendimento!\n\n"
+        "O atendimento será confirmado assim que ocorrer o aceite atrávés do link. Ok?\n\n"
+        "Lembre-se: \n\n"
+            1)    O cliente irá receber o *profissional indicado pela Vavivê*.
+            2)    Lembre-se das nossas 3 confirmações do atendimento!\n\n"
         "*CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO\n\n*"
         "Abs, Vavivê!"
     )
     mensagem = f"""Olá, Tudo bem com você?
-Temos uma oportunidade especial para você nesta região! Quer assumir essa demanda? Está dentro da sua rota!
+Temos uma oportunidade especial para você dentro da sua rota!
 *Cliente:* {nome_cliente_fmt}
 📅 *Data:* {data_linha}
 🛠️ *Serviço:* {servico}
@@ -75,8 +77,7 @@ Temos uma oportunidade especial para você nesta região! Quer assumir essa dema
 📍 *Bairro:* {bairro}
 🏙️ *Cidade:* {cidade}
 💬 *Observações do Atendimento:* {obs_prestador}
-*LINK DO GOOGLE MAPAS*
-{"🌎 [Abrir no Google Mapas](" + maps_url + ")" if maps_url else ""}
+*LINK DO GOOGLE MAPAS* {"🌎 (" + maps_url + ")" if maps_url else ""}
 {fechamento}
 {rodape}
 """
