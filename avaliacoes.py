@@ -1,3 +1,5 @@
+ULTIMO CODIGO FUNCIONANDO
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -5,14 +7,10 @@ import os
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 import tempfile
-import hashlib
-import urllib.parse
 
 st.set_page_config(page_title="Otimização Rotas Vavivê", layout="wide")
 st.title("Otimização de Rotas Vavivê")
 st.write("Faça upload do Excel original para gerar todos os dados tratados automaticamente.")
-
-ACEITES_FILE = "aceites_atendimentos.xlsx"
 
 def traduzir_dia_semana(date_obj):
     dias_pt = {
@@ -30,25 +28,10 @@ def formatar_nome_simples(nome):
     else:
         return partes[0]
 
-def gerar_token_aceite(os_id, prof_id):
-    chave = f"{os_id}_{prof_id}"
-    return hashlib.sha256(chave.encode()).hexdigest()[:10]
-
-def gerar_link_aceite(os_id, prof_id, prof_nome):
-    base_url = st.secrets.get("ACEITE_BASE_URL", "https://rotasvavive.streamlit.app")
-    token = gerar_token_aceite(os_id, prof_id)
-    params = urllib.parse.urlencode({
-        "os": os_id,
-        "prof_id": prof_id,
-        "prof_nome": prof_nome,
-        "token": token
-    })
-    return f"{base_url}?{params}"
-
 def gerar_mensagem_personalizada(
     nome_profissional, nome_cliente, data_servico, servico,
     duracao, rua, numero, complemento, bairro, cidade, latitude, longitude,
-    ja_atendeu, hora_entrada, obs_prestador, link_aceite
+    ja_atendeu, hora_entrada, obs_prestador 
 ):
     nome_profissional_fmt = formatar_nome_simples(nome_profissional)
     nome_cliente_fmt = nome_cliente.split()[0].strip().title()
@@ -56,6 +39,7 @@ def gerar_mensagem_personalizada(
         data_dt = pd.to_datetime(data_servico, dayfirst=True, errors="coerce")
     else:
         data_dt = data_servico
+
     if pd.isnull(data_dt):
         data_formatada = ""
         dia_semana = ""
@@ -77,10 +61,10 @@ def gerar_mensagem_personalizada(
     rodape = (
         "O atendimento será confirmado após o aceite do atendimento, Nome e observações do cliente. Ok?\n\n"
         "Lembre que o cliente irá receber o *profissional indicado pela Vavivê*. Lembre-se das nossas 3 confirmações do atendimento!\n\n"
-        "*CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO*\n\n"
+        "*CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO\n\n*"
         "Abs, Vavivê!"
     )
-    mensagem = f"""Olá, {nome_profissional_fmt}! Tudo bem com você?
+    mensagem = f"""Olá, Tudo bem com você?
 Temos uma oportunidade especial para você nesta região! Quer assumir essa demanda? Está dentro da sua rota!
 *Cliente:* {nome_cliente_fmt}
 📅 *Data:* {data_linha}
@@ -93,7 +77,6 @@ Temos uma oportunidade especial para você nesta região! Quer assumir essa dema
 💬 *Observações do Atendimento:* {obs_prestador}
 *LINK DO GOOGLE MAPAS*
 {"🌎 [Abrir no Google Mapas](" + maps_url + ")" if maps_url else ""}
-*Clique aqui para ACEITAR o atendimento:* {link_aceite}
 {fechamento}
 {rodape}
 """
@@ -103,7 +86,7 @@ def padronizar_cpf_cnpj(coluna):
     return (
         coluna.astype(str)
         .str.replace(r'\D', '', regex=True)
-        .str.zfill(11)
+        .str.zfill(11)  # Se só CPF, use 11; se também CNPJ, use 14
         .str.strip()
     )
 
@@ -276,7 +259,6 @@ def pipeline(file_path, output_dir):
     )
     salvar_df(df_atendimentos, "df_atendimentos", output_dir)
 
-    # ============= ABA HISTÓRICO 60 DIAS ==============
     hoje = datetime.now().date()
     limite = hoje - timedelta(days=60)
     data1_datetime = pd.to_datetime(df_atendimentos["Data 1"], errors="coerce")
@@ -291,19 +273,19 @@ def pipeline(file_path, output_dir):
     ]]
     salvar_df(df_historico_60_dias, "df_historico_60_dias", output_dir)
 
-    # ============= JOIN CLIENTE X PRESTADOR HISTÓRICO ===========
+    # Cliente x Prestador histórico
     df_cliente_prestador = df_historico_60_dias.groupby(
         ["CPF_CNPJ","ID Prestador"]
     ).size().reset_index(name="Qtd Atendimentos Cliente-Prestador")
     salvar_df(df_cliente_prestador, "df_cliente_prestador", output_dir)
 
-        # ============= QTD ATENDIMENTOS POR PRESTADOR HISTÓRICO ===========
+    # Qtd atendimentos por prestador histórico
     df_qtd_por_prestador = df_historico_60_dias.groupby(
         "ID Prestador"
     ).size().reset_index(name="Qtd Atendimentos Prestador")
     salvar_df(df_qtd_por_prestador, "df_qtd_por_prestador", output_dir)
 
-    # ============= DISTANCIAS =============
+    # ============= DISTANCIAS ==================
     df_clientes_coord = df_clientes[["CPF_CNPJ","Latitude Cliente","Longitude Cliente"]].dropna().drop_duplicates("CPF_CNPJ")
     df_profissionais_coord = df_profissionais[["ID Prestador","Latitude Profissional","Longitude Profissional"]].dropna().drop_duplicates("ID Prestador")
 
@@ -348,7 +330,7 @@ def pipeline(file_path, output_dir):
     ]]
     salvar_df(df_bloqueio_completo, "df_bloqueio_completo", output_dir)
 
-    # ============= ATENDIMENTOS FUTUROS ============
+    # ============= ATEND FUTURO ==================
     ontem = datetime.now().date() - timedelta(days=1)
     df_futuros = df_atendimentos[
         (df_atendimentos["Status Serviço"].str.lower() != "cancelado") &
@@ -392,15 +374,16 @@ def pipeline(file_path, output_dir):
     df_atendimentos_sem_localizacao.to_pickle('df_atendimentos_sem_localizacao.pkl')
     df_distancias_alerta.to_pickle('df_distancias_alerta.pkl')
 
-    # ====================== MATRIZ ROTAS COMPLETA (PRIORIZAÇÃO) ======================
+    # ====================== MATRIZ ROTAS - Bloco Corrigido ======================
     matriz_resultado_corrigida = []
+    
     preferidas_alocadas_dia = dict()  # {data: set de ids já alocadas como preferidas naquele dia}
-
+    
     for _, atendimento in df_atendimentos_futuros_validos.iterrows():
         data_atendimento = atendimento["Data 1"].date()
         if data_atendimento not in preferidas_alocadas_dia:
             preferidas_alocadas_dia[data_atendimento] = set()
-
+    
         os_id = atendimento["OS"]
         cpf = atendimento["CPF_CNPJ"]
         nome_cliente = atendimento["Cliente"]
@@ -413,12 +396,12 @@ def pipeline(file_path, output_dir):
         lat_cliente = atendimento["Latitude Cliente"]
         lon_cliente = atendimento["Longitude Cliente"]
         plano = atendimento.get("Plano", "")
-
+    
         bloqueados = (
             df_bloqueio_completo[df_bloqueio_completo["CPF_CNPJ"] == cpf]["ID Prestador"]
             .astype(str).str.strip().tolist()
         )
-
+    
         linha = {
             "OS": os_id,
             "CPF_CNPJ": cpf,
@@ -431,7 +414,7 @@ def pipeline(file_path, output_dir):
             "Observações prestador": obs_prestador,
             "Ponto de Referencia": ponto_referencia
         }
-
+    
         cliente_match = df_clientes[df_clientes["CPF_CNPJ"] == cpf]
         cliente_info = cliente_match.iloc[0] if not cliente_match.empty else None
         if cliente_info is not None:
@@ -444,22 +427,20 @@ def pipeline(file_path, output_dir):
             longitude = cliente_info["Longitude Cliente"]
         else:
             rua = numero = complemento = bairro = cidade = latitude = longitude = ""
-
-        # Mensagem padrão do atendimento
+    
         linha["Mensagem Padrão"] = gerar_mensagem_personalizada(
             "PROFISSIONAL",
             nome_cliente, data_1, servico,
             duracao_servico, rua, numero, complemento, bairro, cidade,
             latitude, longitude, ja_atendeu=False,
-            hora_entrada=hora_entrada,
-            obs_prestador=obs_prestador,
-            link_aceite="https://rotasvavive.streamlit.app/"
+            hora_entrada=hora_entrada, 
+            obs_prestador=obs_prestador
         )
-
+    
         utilizados = set()
         col = 1
-
-        # Bloco 1: Preferência do cliente (NÃO repete no mesmo dia)
+    
+        # 1. Preferência do cliente (NÃO repete no mesmo dia)
         preferencia_cliente_df = df_preferencias_completo[df_preferencias_completo["CPF_CNPJ"] == cpf]
         preferida_id = None
         if not preferencia_cliente_df.empty:
@@ -471,14 +452,13 @@ def pipeline(file_path, output_dir):
                 and pd.notnull(profissional_preferida_info.iloc[0]["Latitude Profissional"])
                 and pd.notnull(profissional_preferida_info.iloc[0]["Longitude Profissional"])
                 and "inativo" not in profissional_preferida_info.iloc[0]["Nome Prestador"].lower()
-                and id_preferida_temp not in preferidas_alocadas_dia[data_atendimento]
+                and id_preferida_temp not in preferidas_alocadas_dia[data_atendimento]  # NOVA REGRA
             ):
                 preferida_id = id_preferida_temp
                 nome_prof = profissional_preferida_info.iloc[0]["Nome Prestador"]
                 celular = profissional_preferida_info.iloc[0]["Celular"]
                 lat_prof = profissional_preferida_info.iloc[0]["Latitude Profissional"]
                 lon_prof = profissional_preferida_info.iloc[0]["Longitude Profissional"]
-                link_aceite = gerar_link_aceite(os_id, preferida_id, nome_prof)
                 qtd_atend_cliente_pref = df_cliente_prestador[
                     (df_cliente_prestador["CPF_CNPJ"] == cpf) &
                     (df_cliente_prestador["ID Prestador"] == preferida_id)
@@ -502,14 +482,13 @@ def pipeline(file_path, output_dir):
                     duracao_servico, rua, numero, complemento, bairro, cidade,
                     latitude, longitude, ja_atendeu=True,
                     hora_entrada=hora_entrada,
-                    obs_prestador=obs_prestador,
-                    link_aceite=link_aceite
+                    obs_prestador=obs_prestador
                 )
                 linha[f"Critério Utilizado {col}"] = "Preferência do Cliente"
                 utilizados.add(preferida_id)
                 preferidas_alocadas_dia[data_atendimento].add(preferida_id)
                 col += 1
-
+    
         # 2. Mais atendeu o cliente
         df_candidatos = df_profissionais[
             ~df_profissionais["ID Prestador"].astype(str).str.strip().isin(bloqueados)
@@ -527,7 +506,6 @@ def pipeline(file_path, output_dir):
                     lat_prof = prof.iloc[0]["Latitude Profissional"]
                     lon_prof = prof.iloc[0]["Longitude Profissional"]
                     if pd.notnull(lat_prof) and pd.notnull(lon_prof) and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
-                        link_aceite = gerar_link_aceite(os_id, id_prof, prof.iloc[0]["Nome Prestador"])
                         qtd_atend_cliente = int(mais_atend)
                         qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof].empty else 0
                         distancia = float(df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == id_prof)]["Distância (km)"].iloc[0]) if not df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == id_prof)].empty else np.nan
@@ -541,13 +519,12 @@ def pipeline(file_path, output_dir):
                             duracao_servico, rua, numero, complemento, bairro, cidade,
                             latitude, longitude, ja_atendeu=True,
                             hora_entrada=hora_entrada,
-                            obs_prestador=obs_prestador,
-                            link_aceite=link_aceite
+                            obs_prestador=obs_prestador
                         )
                         linha[f"Critério Utilizado {col}"] = "Mais atendeu o cliente"
                         utilizados.add(id_prof)
                         col += 1
-
+    
         # 3. Último profissional que atendeu
         df_hist_cliente = df_historico_60_dias[df_historico_60_dias["CPF_CNPJ"] == cpf]
         if not df_hist_cliente.empty:
@@ -559,7 +536,6 @@ def pipeline(file_path, output_dir):
                     lat_prof = prof.iloc[0]["Latitude Profissional"]
                     lon_prof = prof.iloc[0]["Longitude Profissional"]
                     if pd.notnull(lat_prof) and pd.notnull(lon_prof) and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
-                        link_aceite = gerar_link_aceite(os_id, ultimo_prof_id, prof.iloc[0]["Nome Prestador"])
                         qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == ultimo_prof_id)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == ultimo_prof_id)].empty else 0
                         qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == ultimo_prof_id]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == ultimo_prof_id].empty else 0
                         distancia = float(df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == ultimo_prof_id)]["Distância (km)"].iloc[0]) if not df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == ultimo_prof_id)].empty else np.nan
@@ -573,13 +549,12 @@ def pipeline(file_path, output_dir):
                             duracao_servico, rua, numero, complemento, bairro, cidade,
                             latitude, longitude, ja_atendeu=True,
                             hora_entrada=hora_entrada,
-                            obs_prestador=obs_prestador,
-                            link_aceite=link_aceite
+                            obs_prestador=obs_prestador
                         )
                         linha[f"Critério Utilizado {col}"] = "Último profissional que atendeu"
                         utilizados.add(ultimo_prof_id)
                         col += 1
-
+    
         # 4. Profissional preferencial da plataforma (até 5 km)
         if not df_queridinhos.empty:
             for _, qrow in df_queridinhos.iterrows():
@@ -594,7 +569,6 @@ def pipeline(file_path, output_dir):
                         dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == queridinha_id)]
                         distancia = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else np.nan
                         if distancia <= 5.0:
-                            link_aceite = gerar_link_aceite(os_id, queridinha_id, prof.iloc[0]["Nome Prestador"])
                             qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == queridinha_id)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == queridinha_id)].empty else 0
                             qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == queridinha_id]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == queridinha_id].empty else 0
                             criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km"
@@ -607,13 +581,12 @@ def pipeline(file_path, output_dir):
                                 duracao_servico, rua, numero, complemento, bairro, cidade,
                                 latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
                                 hora_entrada=hora_entrada,
-                                obs_prestador=obs_prestador,
-                                link_aceite=link_aceite
+                                obs_prestador=obs_prestador
                             )
                             linha[f"Critério Utilizado {col}"] = "Profissional preferencial da plataforma (até 5 km)"
                             utilizados.add(queridinha_id)
                             col += 1
-
+    
         # 5. Profissional mais próxima geograficamente (até completar 15)
         dist_cand = df_distancias[(df_distancias["CPF_CNPJ"] == cpf)].copy()
         dist_cand = dist_cand[~dist_cand["ID Prestador"].isin(utilizados | set(bloqueados) | preferidas_alocadas_dia[data_atendimento])]
@@ -630,7 +603,6 @@ def pipeline(file_path, output_dir):
             lon_prof = prof.iloc[0]["Longitude Profissional"]
             if not (pd.notnull(lat_prof) and pd.notnull(lon_prof)):
                 continue
-            link_aceite = gerar_link_aceite(os_id, str(dist_row["ID Prestador"]), prof.iloc[0]["Nome Prestador"])
             qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == str(dist_row["ID Prestador"]))]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == str(dist_row["ID Prestador"]))].empty else 0
             qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == str(dist_row["ID Prestador"])]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == str(dist_row["ID Prestador"])].empty else 0
             distancia = float(dist_row["Distância (km)"])
@@ -644,14 +616,14 @@ def pipeline(file_path, output_dir):
                 duracao_servico, rua, numero, complemento, bairro, cidade,
                 latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
                 hora_entrada=hora_entrada,
-                obs_prestador=obs_prestador,
-                link_aceite=link_aceite
+                obs_prestador=obs_prestador
             )
             linha[f"Critério Utilizado {col}"] = "Mais próxima geograficamente"
             utilizados.add(str(dist_row["ID Prestador"]))
             col += 1
-
-        # 6. Sumidinhos (Baixa Disponibilidade) - posições 16 a 20 (se já estiverem entre os anteriores)
+    
+        # 6. Sumidinhos (Baixa Disponibilidade) - posições 16 a 20
+        # SÓ entram se já estiverem em utilizados (recomendações anteriores)
         sumidinhos_para_incluir = [sum_id for sum_id in df_sumidinhos["ID Prestador"].astype(str) if sum_id in utilizados]
         for sum_id in sumidinhos_para_incluir:
             if col > 20:
@@ -667,7 +639,6 @@ def pipeline(file_path, output_dir):
                 continue
             dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == sum_id)]
             distancia = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else np.nan
-            link_aceite = gerar_link_aceite(os_id, sum_id, prof.iloc[0]["Nome Prestador"])
             qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == sum_id)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == sum_id)].empty else 0
             qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == sum_id]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == sum_id].empty else 0
             criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km"
@@ -680,12 +651,11 @@ def pipeline(file_path, output_dir):
                 duracao_servico, rua, numero, complemento, bairro, cidade,
                 latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
                 hora_entrada=hora_entrada,
-                obs_prestador=obs_prestador,
-                link_aceite=link_aceite
+                obs_prestador=obs_prestador
             )
             linha[f"Critério Utilizado {col}"] = "Baixa Disponibilidade"
             col += 1
-
+    
         # 7. Se faltar profissionais para completar até 20, use os mais próximos ainda não recomendados
         if col <= 20:
             dist_restantes = df_distancias[(df_distancias["CPF_CNPJ"] == cpf)].copy()
@@ -703,12 +673,10 @@ def pipeline(file_path, output_dir):
                 lon_prof = prof.iloc[0]["Longitude Profissional"]
                 if not (pd.notnull(lat_prof) and pd.notnull(lon_prof)):
                     continue
-                link_aceite = gerar_link_aceite(os_id, str(dist_row["ID Prestador"]), prof.iloc[0]["Nome Prestador"])
                 qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == str(dist_row["ID Prestador"]))]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == str(dist_row["ID Prestador"]))].empty else 0
                 qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == str(dist_row["ID Prestador"])]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == str(dist_row["ID Prestador"])].empty else 0
                 distancia = float(dist_row["Distância (km)"])
                 criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km"
-
                 linha[f"Classificação da Profissional {col}"] = col
                 linha[f"Critério {col}"] = criterio
                 linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
@@ -718,16 +686,25 @@ def pipeline(file_path, output_dir):
                     duracao_servico, rua, numero, complemento, bairro, cidade,
                     latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
                     hora_entrada=hora_entrada,
-                    obs_prestador=obs_prestador,
-                    link_aceite=link_aceite
+                    obs_prestador=obs_prestador
                 )
                 linha[f"Critério Utilizado {col}"] = "Mais próxima geograficamente (complemento)"
                 col += 1
-
+    
         matriz_resultado_corrigida.append(linha)
-    # ===================== FIM DO BLOCO DE PRIORIZAÇÃO ====================
+# ===================== FIM DO BLOCO DE PRIORIZAÇÃO CORRIGIDO ====================
+
+
 
     df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
+
+    link_validacao = "\n\n👉 [Clique aqui para validar seu aceite](https://sualandingpage.com/aceite)\n"
+    df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas["Mensagem Padrão"].astype(str) + link_validacao
+    
+    # Mostra preview no app
+    st.markdown("### Preview das mensagens padrão da aba 'Rotas' (com link de validação):")
+    st.dataframe(df_matriz_rotas[["OS", "Nome Cliente", "Mensagem Padrão"]].head(5), use_container_width=True)
+
 
     for i in range(1, 21):
         if f"Classificação da Profissional {i}" not in df_matriz_rotas.columns:
@@ -738,8 +715,6 @@ def pipeline(file_path, output_dir):
             df_matriz_rotas[f"Nome Prestador {i}"] = pd.NA
         if f"Celular {i}" not in df_matriz_rotas.columns:
             df_matriz_rotas[f"Celular {i}"] = pd.NA
-        if f"Mensagem {i}" not in df_matriz_rotas.columns:
-            df_matriz_rotas[f"Mensagem {i}"] = pd.NA
         if f"Critério Utilizado {i}" not in df_matriz_rotas.columns:
             df_matriz_rotas[f"Critério Utilizado {i}"] = pd.NA
 
@@ -754,12 +729,11 @@ def pipeline(file_path, output_dir):
             f"Critério {i}",
             f"Nome Prestador {i}",
             f"Celular {i}",
-            f"Mensagem {i}",
             f"Critério Utilizado {i}",
         ])
     df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
 
-    # EXEMPLO FINAL: Exporta todas as abas para o Excel consolidado
+    # Exemplo do final:
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
     with pd.ExcelWriter(final_path, engine='xlsxwriter') as writer:
         df_matriz_rotas.to_excel(writer, sheet_name="Rotas", index=False)
@@ -779,43 +753,9 @@ def pipeline(file_path, output_dir):
         df_atendimentos_futuros_validos.to_excel(writer, sheet_name="Atend Futuros OK", index=False)
         df_atendimentos_sem_localizacao.to_excel(writer, sheet_name="Atend Futuros Sem Loc", index=False)
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
-    
+        # ...salva os outros DataFrames aqui também, se quiser
+    return final_path
 
-    
-    return final_path, df_matriz_rotas
-
-# ================= ACEITE VIA URL =================
-def processar_aceite_url():
-    params = st.query_params
-    if all(x in params for x in ["os", "prof_id", "prof_nome", "token"]):
-        os_id = params["os"]
-        prof_id = params["prof_id"]
-        prof_nome = params["prof_nome"]
-        token = params["token"]
-        now = datetime.now()
-        df_aceites = pd.DataFrame()
-        if os.path.exists(ACEITES_FILE):
-            df_aceites = pd.read_excel(ACEITES_FILE)
-        novo = {
-            "Data Aceite": now.strftime("%Y-%m-%d %H:%M:%S"),
-            "OS": os_id,
-            "ID Prestador": prof_id,
-            "Nome Prestador": prof_nome,
-            "Token": token,
-        }
-        if not (
-            (not df_aceites.empty) and 
-            ( (df_aceites["OS"] == os_id) & (df_aceites["ID Prestador"] == prof_id) ).any()
-        ):
-            df_aceites = pd.concat([df_aceites, pd.DataFrame([novo])], ignore_index=True)
-            df_aceites.to_excel(ACEITES_FILE, index=False)
-        st.success("Aceite registrado com sucesso! Obrigado!")
-        st.write("Você já confirmou o interesse neste atendimento.")
-        st.stop()
-
-processar_aceite_url()
-
-# ============== STREAMLIT PRINCIPAL =============
 uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
 
 if uploaded_file:
@@ -825,7 +765,7 @@ if uploaded_file:
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.read())
             try:
-                excel_path, df_rotas = pipeline(temp_path, tempdir)
+                excel_path = pipeline(temp_path, tempdir)
                 if os.path.exists(excel_path):
                     with open(excel_path, "rb") as f:
                         data = f.read()
@@ -836,24 +776,23 @@ if uploaded_file:
                         file_name="rotas_bh_dados_tratados_completos.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
+
+
+                # --- Visualização da aba "Rotas" no Streamlit ---
+                    import io
+                    
                     st.markdown("### Visualização da aba 'Rotas'")
-                    st.dataframe(df_rotas, use_container_width=True)
+                    rotas_df = pd.read_excel(io.BytesIO(data), sheet_name="Rotas")
+                    st.dataframe(rotas_df, use_container_width=True)
+
                 else:
                     st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
             except Exception as e:
                 st.error(f"Erro no processamento: {e}")
 
-# =============== TABELA DE ACEITES ===============
-st.markdown("---")
-st.header("Aceites Recebidos")
-if os.path.exists(ACEITES_FILE):
-    df_aceites = pd.read_excel(ACEITES_FILE)
-    st.dataframe(df_aceites.sort_values("Data Aceite", ascending=False), use_container_width=True)
-else:
-    st.info("Nenhum aceite registrado ainda.")
 
 st.markdown("""
 ---
-> **Observação:** Os arquivos processados e aceites ficam disponíveis para download logo após a execução.  
+> **Observação:** Os arquivos processados ficam disponíveis para download logo após a execução.  
 > Para dúvidas ou adaptações, fale com o suporte!
 """)
