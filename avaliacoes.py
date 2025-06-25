@@ -1,4 +1,3 @@
-ULTIMO CODIGO FUNCIONANDO
 
 import streamlit as st
 import pandas as pd
@@ -62,7 +61,7 @@ def gerar_mensagem_personalizada(
         """
         O atendimento será confirmado após o aceite do atendimento, Nome e observações do cliente. Ok?
         
-        Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
+        1)    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
         2)    Lembre-se das nossas 3 confirmações do atendimento!
         
         *CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO*
