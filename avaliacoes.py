@@ -20,7 +20,7 @@ def exibe_formulario_aceite(os_id):
     aceitou = st.checkbox("Aceito realizar este atendimento?")
     if st.button("Enviar Aceite"):
         salvar_aceite(os_id, profissional, telefone, aceitou)
-        st.success("Obrigado! Seu aceite foi registrado com sucesso.")
+        st.success("Obrigado! Daremos o retorno sobre o atendimento! Seu aceite foi registrado com sucesso.")
         st.stop()  # não processa pipeline quando exibe o formulário
 
 def salvar_aceite(os_id, profissional, telefone, aceitou):
@@ -106,10 +106,8 @@ def gerar_mensagem_personalizada(
     rodape = (
         """
 O atendimento será confirmado após o aceite!
-
-1)    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
-2)    Lembre-se das nossas 3 confirmações do atendimento!
-
+*1)*    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
+*2)*    Lembre-se das nossas 3 confirmações do atendimento!
 *CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO*
 
 Abs, Vavivê!
@@ -754,7 +752,7 @@ def pipeline(file_path, output_dir):
 # ----------- LINK DE ACEITE PERSONALIZADO NA MENSAGEM PADRÃO -----------
     app_url = "https://rotasvavive.streamlit.app/"  # ou o domínio real do seu app Streamlit
     df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
-        lambda row: f"{row['Mensagem Padrão']}\n\n👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n",
+        lambda row: f"{row['Mensagem Padrão']}\n👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n",
         axis=1
     )
 # ------------------------------------------------------------------------
