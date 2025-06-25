@@ -779,6 +779,9 @@ def pipeline(file_path, output_dir):
         df_atendimentos_futuros_validos.to_excel(writer, sheet_name="Atend Futuros OK", index=False)
         df_atendimentos_sem_localizacao.to_excel(writer, sheet_name="Atend Futuros Sem Loc", index=False)
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
+    
+
+    
     return final_path, df_matriz_rotas
 
 # ================= ACEITE VIA URL =================
