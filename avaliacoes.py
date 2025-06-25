@@ -68,6 +68,7 @@ def gerar_mensagem_personalizada(
         
         Abs, Vavivê!
         """
+    )
 
     mensagem = f"""Olá, Tudo bem com você?
 Temos uma oportunidade especial para você dentro da sua rota!
