@@ -55,20 +55,20 @@ def gerar_mensagem_personalizada(
         maps_url = ""
     fechamento = (
         "SIM ou NÃO para o aceite!" if ja_atendeu
-        else "Responda com SIM caso tenha disponibilidade!"
+        else "Acesse o link ao final da mensagem e responda com SIM caso tenha disponibilidade!"
     )
     rodape = (
         """
-        O atendimento será confirmado após o aceite do atendimento, Nome e observações do cliente. Ok?
-        
-        1)    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
-        2)    Lembre-se das nossas 3 confirmações do atendimento!
-        
-        *CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO*
-        
-        Abs, Vavivê!
-        """
-    )
+O atendimento será confirmado após o aceite!
+
+1)    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
+2)    Lembre-se das nossas 3 confirmações do atendimento!
+
+*CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO*
+
+Abs, Vavivê!
+"""
+)
 
     mensagem = f"""Olá, Tudo bem com você?
 Temos uma oportunidade especial para você dentro da sua rota!
@@ -81,7 +81,7 @@ Temos uma oportunidade especial para você dentro da sua rota!
 📍 *Bairro:* {bairro}
 🏙️ *Cidade:* {cidade}
 💬 *Observações do Atendimento:* {obs_prestador}
-*LINK DO GOOGLE MAPAS* {"🌎 (" + maps_url + ")" if maps_url else ""}
+*GOOGLE MAPAS* {"🌎 (" + maps_url + ")" if maps_url else ""}
 {fechamento}
 {rodape}
 """
@@ -703,12 +703,12 @@ def pipeline(file_path, output_dir):
 
     df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
 
-    link_validacao = "\n\n👉 [Clique aqui para validar seu aceite](https://sualandingpage.com/aceite)\n"
+    link_validacao = "\n\n👉 *Clique aqui para validar seu aceite* (https://sualandingpage.com/aceite)\n"
     df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas["Mensagem Padrão"].astype(str) + link_validacao
     
     # Mostra preview no app
-    st.markdown("### Preview das mensagens padrão da aba 'Rotas' (com link de validação):")
-    st.dataframe(df_matriz_rotas[["OS", "Nome Cliente", "Mensagem Padrão"]].head(5), use_container_width=True)
+#    st.markdown("### Preview das mensagens padrão da aba 'Rotas' (com link de validação):")
+ #   st.dataframe(df_matriz_rotas[["OS", "Nome Cliente", "Mensagem Padrão"]].head(5), use_container_width=True)
 
 
     for i in range(1, 21):
