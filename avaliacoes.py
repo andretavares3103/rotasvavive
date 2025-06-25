@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -10,6 +9,43 @@ import tempfile
 st.set_page_config(page_title="Otimização Rotas Vavivê", layout="wide")
 st.title("Otimização de Rotas Vavivê")
 st.write("Faça upload do Excel original para gerar todos os dados tratados automaticamente.")
+
+ACEITES_FILE = "aceites.xlsx"
+
+# 1. --- FORMULÁRIO DE ACEITE ---
+def exibe_formulario_aceite(os_id):
+    st.header(f"Validação de Aceite (OS {os_id})")
+    profissional = st.text_input("Nome da Profissional")
+    telefone = st.text_input("Telefone para contato")
+    aceitou = st.checkbox("Aceito realizar este atendimento?")
+    if st.button("Enviar Aceite"):
+        salvar_aceite(os_id, profissional, telefone, aceitou)
+        st.success("Obrigado! Seu aceite foi registrado com sucesso.")
+        st.stop()  # não processa pipeline quando exibe o formulário
+
+def salvar_aceite(os_id, profissional, telefone, aceitou):
+    if os.path.exists(ACEITES_FILE):
+        df = pd.read_excel(ACEITES_FILE)
+    else:
+        df = pd.DataFrame(columns=["OS", "Profissional", "Telefone", "Aceitou", "Data"])
+    nova_linha = {
+        "OS": os_id,
+        "Profissional": profissional,
+        "Telefone": telefone,
+        "Aceitou": "Sim" if aceitou else "Não",
+        "Data": pd.Timestamp.now()
+    }
+    df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
+    df.to_excel(ACEITES_FILE, index=False)
+
+# --- Detecta se abriu o app pelo link de aceite ---
+query_params = st.experimental_get_query_params()
+aceite_os = query_params.get("aceite", [None])[0]
+if aceite_os:
+    exibe_formulario_aceite(aceite_os)
+    st.stop()
+
+# =========== pipeline completo continua normalmente ===========
 
 def traduzir_dia_semana(date_obj):
     dias_pt = {
@@ -68,8 +104,7 @@ O atendimento será confirmado após o aceite!
 
 Abs, Vavivê!
 """
-)
-
+    )
     mensagem = f"""Olá, Tudo bem com você?
 Temos uma oportunidade especial para você dentro da sua rota!
 *Cliente:* {nome_cliente_fmt}
@@ -98,6 +133,9 @@ def padronizar_cpf_cnpj(coluna):
 def salvar_df(df, nome_arquivo, output_dir):
     caminho = os.path.join(output_dir, f"{nome_arquivo}.xlsx")
     df.to_excel(caminho, index=False)
+
+
+####----------
 
 def pipeline(file_path, output_dir):
     import xlsxwriter
@@ -703,9 +741,14 @@ def pipeline(file_path, output_dir):
 
     df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
 
-    link_validacao = "\n\n👉 *Clique aqui para validar seu aceite* (https://sualandingpage.com/aceite)\n"
-    df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas["Mensagem Padrão"].astype(str) + link_validacao
-    
+# ----------- LINK DE ACEITE PERSONALIZADO NA MENSAGEM PADRÃO -----------
+    app_url = "https://rotasvavive.streamlit.app/"  # ou o domínio real do seu app Streamlit
+    df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
+        lambda row: f"{row['Mensagem Padrão']}\n\n👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n",
+        axis=1
+    )
+# ------------------------------------------------------------------------
+
     # Mostra preview no app
 #    st.markdown("### Preview das mensagens padrão da aba 'Rotas' (com link de validação):")
  #   st.dataframe(df_matriz_rotas[["OS", "Nome Cliente", "Mensagem Padrão"]].head(5), use_container_width=True)
@@ -795,6 +838,15 @@ if uploaded_file:
             except Exception as e:
                 st.error(f"Erro no processamento: {e}")
 
+if os.path.exists(ACEITES_FILE):
+    st.markdown("### Histórico de Aceites")
+    df_aceites = pd.read_excel(ACEITES_FILE)
+    st.dataframe(df_aceites)
+    st.download_button(
+        label="Baixar histórico de aceites",
+        data=df_aceites.to_excel(index=False),
+        file_name="aceites.xlsx"
+    )
 
 st.markdown("""
 ---
