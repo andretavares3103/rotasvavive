@@ -24,19 +24,29 @@ def exibe_formulario_aceite(os_id):
         st.stop()  # não processa pipeline quando exibe o formulário
 
 def salvar_aceite(os_id, profissional, telefone, aceitou):
+    agora = pd.Timestamp.now()
+    data = agora.strftime("%d/%m/%Y")
+    dia_semana = agora.strftime("%A")  # exemplo: Monday, Tuesday...
+    horario = agora.strftime("%H:%M:%S")
     if os.path.exists(ACEITES_FILE):
         df = pd.read_excel(ACEITES_FILE)
     else:
-        df = pd.DataFrame(columns=["OS", "Profissional", "Telefone", "Aceitou", "Data"])
+        df = pd.DataFrame(columns=[
+            "OS", "Profissional", "Telefone", "Aceitou", 
+            "Data do Aceite", "Dia da Semana", "Horário do Aceite"
+        ])
     nova_linha = {
         "OS": os_id,
         "Profissional": profissional,
         "Telefone": telefone,
         "Aceitou": "Sim" if aceitou else "Não",
-        "Data": pd.Timestamp.now()
+        "Data do Aceite": data,
+        "Dia da Semana": dia_semana,
+        "Horário do Aceite": horario
     }
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
     df.to_excel(ACEITES_FILE, index=False)
+
 
 # --- Detecta se abriu o app pelo link de aceite ---
 aceite_os = st.query_params.get("aceite", None)
@@ -911,6 +921,21 @@ if uploaded_file:
             except Exception as e:
                 st.error(f"Erro no processamento: {e}")
 
+
+if os.path.exists(ACEITES_FILE):
+    st.markdown("### Histórico de Aceites")
+    df_aceites = pd.read_excel(ACEITES_FILE)
+    st.dataframe(df_aceites)
+    st.download_button(
+        label="Baixar histórico de aceites",
+        data=df_aceites.to_excel(index=False),
+        file_name="aceites.xlsx"
+    )
+st.markdown("""
+---
+> **Observação:** Os arquivos processados ficam disponíveis para download logo após a execução.  
+> Para dúvidas ou adaptações, fale com o suporte!
+""")
 
 import io
 
