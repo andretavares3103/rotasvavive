@@ -825,18 +825,92 @@ if uploaded_file:
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
 
-
-                # --- Visualização da aba "Rotas" no Streamlit ---
+                    # ------------------------------------------------------------------
+                    #      BLOCOS DE TABELAS LADO A LADO COM FILTROS PERSONALIZADOS
+                    # ------------------------------------------------------------------
                     import io
-                    
-                    st.markdown("### Visualização da aba 'Rotas'")
-                    rotas_df = pd.read_excel(io.BytesIO(data), sheet_name="Rotas")
-                    st.dataframe(rotas_df, use_container_width=True)
+                    import pandas as pd
+
+                    # Carregar matriz de rotas do Excel processado
+                    df_rotas = pd.read_excel(io.BytesIO(data), sheet_name="Rotas")
+
+                    # Carregar aceites, se existir
+                    ACEITES_FILE = "aceites.xlsx"
+                    if os.path.exists(ACEITES_FILE):
+                        df_aceites = pd.read_excel(ACEITES_FILE)
+                        # Junta info da rota para enriquecer aceites
+                        df_aceites_completo = pd.merge(
+                            df_aceites,
+                            df_rotas[
+                                ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
+                                 "Duração do Serviço", "Hora de entrada", "Observações prestador", "Ponto de Referencia"]
+                            ],
+                            how="left", on="OS"
+                        )
+                    else:
+                        df_aceites_completo = pd.DataFrame()
+
+                    # BLOCO DAS DUAS COLUNAS LADO A LADO
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.subheader("Matriz de Rotas")
+                        # FILTROS DA MATRIZ DE ROTAS
+                        datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
+                        data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_rotas")
+                        clientes = df_rotas["Nome Cliente"].dropna().unique()
+                        cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_rotas")
+                        profissionais = []
+                        for i in range(1, 21):
+                            profissionais.extend(df_rotas[f"Nome Prestador {i}"].dropna().unique())
+                        profissionais = list(set([p for p in profissionais if isinstance(p, str)]))
+                        profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + profissionais, key="prof_rotas")
+                        df_rotas_filt = df_rotas.copy()
+                        if data_sel != "Todos":
+                            df_rotas_filt = df_rotas_filt[df_rotas_filt["Data 1"].dt.date.astype(str) == data_sel]
+                        if cliente_sel != "Todos":
+                            df_rotas_filt = df_rotas_filt[df_rotas_filt["Nome Cliente"] == cliente_sel]
+                        if profissional_sel != "Todos":
+                            mask = False
+                            for i in range(1, 21):
+                                mask |= (df_rotas_filt[f"Nome Prestador {i}"] == profissional_sel)
+                            df_rotas_filt = df_rotas_filt[mask]
+                        st.dataframe(df_rotas_filt, use_container_width=True)
+
+                    with col2:
+                        st.subheader("Aceites")
+                        if not df_aceites_completo.empty:
+                            # FILTROS DE ACEITES
+                            datas = df_aceites_completo["Data 1"].dropna().sort_values().dt.date.unique()
+                            data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
+                            clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
+                            cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_aceite")
+                            profissionais = df_aceites_completo["Profissional"].dropna().unique()
+                            profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + list(profissionais), key="prof_aceite")
+                            df_aceites_filt = df_aceites_completo.copy()
+                            if data_sel != "Todos":
+                                df_aceites_filt = df_aceites_filt[df_aceites_filt["Data 1"].dt.date.astype(str) == data_sel]
+                            if cliente_sel != "Todos":
+                                df_aceites_filt = df_aceites_filt[df_aceites_filt["Nome Cliente"] == cliente_sel]
+                            if profissional_sel != "Todos":
+                                df_aceites_filt = df_aceites_filt[df_aceites_filt["Profissional"] == profissional_sel]
+                            st.dataframe(df_aceites_filt, use_container_width=True)
+                            st.download_button(
+                                label="Baixar histórico de aceites",
+                                data=df_aceites_filt.to_excel(index=False),
+                                file_name="aceites_filtrados.xlsx"
+                            )
+                        else:
+                            st.info("Nenhum aceite registrado ainda.")
+                    # ------------------------------------------------------------------
+                    #              FIM DO BLOCO DE TABELAS LADO A LADO
+                    # ------------------------------------------------------------------
 
                 else:
                     st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
             except Exception as e:
                 st.error(f"Erro no processamento: {e}")
+
 
 import io
 
