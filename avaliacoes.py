@@ -543,10 +543,10 @@ def pipeline(file_path, output_dir):
 
     print("Colunas geradas:", df_matriz_rotas.columns.tolist())
     if df_matriz_rotas.empty:
-    st.error("Nenhuma linha foi gerada na matriz de rotas! Verifique se há atendimentos futuros na sua planilha.")
-    st.stop()
-else:
-    st.write("Colunas da matriz:", df_matriz_rotas.columns.tolist())
+        st.error("Nenhuma linha foi gerada na matriz de rotas! Verifique se há atendimentos futuros na sua planilha.")
+        st.stop()
+    else:
+        st.write("Colunas da matriz:", df_matriz_rotas.columns.tolist())
 
 
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
