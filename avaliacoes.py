@@ -7,7 +7,7 @@ from geopy.distance import geodesic
 import tempfile
 import io
 
-st.set_page_config(page_title="Otimização Rotas Vavivê", layout="wide")
+st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
 
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
