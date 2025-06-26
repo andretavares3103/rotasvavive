@@ -746,7 +746,7 @@ def pipeline(file_path, output_dir):
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
-tabs = st.tabs(["Upload de Arquivo", "Matriz de Rotas", "Aceites"])
+tabs = st.tabs(["Upload de Arquivo", "Portal de Atendimentos", "Matriz de Rotas", "Aceites"])
 
 with tabs[0]:
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
@@ -775,7 +775,180 @@ with tabs[0]:
                 except Exception as e:
                     st.error(f"Erro no processamento: {e}")
 
-with tabs[1]:
+
+import streamlit as st
+import pandas as pd
+import os
+import urllib
+
+PORTAL_FILE = "atendimentos_portal.csv"
+SENHA_CORRETA = "vvv"
+
+def formatar_hora(h):
+    try:
+        if pd.isnull(h) or h == "":
+            return ""
+        h_str = str(h).strip()
+        if ":" in h_str and len(h_str) == 8:
+            return h_str[:5]
+        if ":" in h_str and len(h_str) == 5:
+            return h_str
+        return pd.to_datetime(h_str).strftime("%H:%M")
+    except:
+        return str(h)
+
+# Topo visual Vavivê
+st.markdown("""
+    <div style="display: flex; align-items: center; margin-bottom: 24px;">
+        <img src="https://i.imgur.com/gIhC0fC.png" height="65" style="margin-right: 24px;">
+        <span style="font-size: 2.2rem; font-weight: 700; color: #18d96b; letter-spacing: 1.5px;">
+            Portal de Atendimentos Vavivê
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
+
+# Só exibe portal após upload/processamento do Excel
+if not os.path.exists(ROTAS_FILE):
+    st.info("Faça o upload e aguarde o processamento para liberar o portal de atendimentos.")
+    st.stop()
+
+df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
+df_rotas["Data 1"] = pd.to_datetime(df_rotas["Data 1"], errors="coerce")
+dias_pt = {
+    "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
+    "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
+}
+df_rotas["Dia da Semana"] = df_rotas["Data 1"].dt.day_name().map(dias_pt)
+df_rotas["Data 1 Formatada"] = df_rotas["Data 1"].dt.strftime("%d/%m/%Y")
+df_rotas["Horas de serviço"] = df_rotas["Duração do Serviço"].apply(formatar_hora)
+df_rotas["Hora de entrada"] = df_rotas["Hora de entrada"].apply(formatar_hora)
+df_rotas = df_rotas[df_rotas["OS"].notnull()]
+df_rotas = df_rotas.sort_values("Data 1")
+df_rotas = df_rotas[df_rotas["Data 1"] >= pd.Timestamp.now()]  # Só futuros
+
+# Bloquear edição por padrão
+if "admin_ok" not in st.session_state:
+    st.session_state["admin_ok"] = False
+
+# Modo admin (para marcar OS do portal)
+with st.expander("🔒 Área Administrativa (marque os atendimentos disponíveis no portal)", expanded=False):
+    senha = st.text_input("Digite a senha de administrador para liberar edição", type="password")
+    if senha == SENHA_CORRETA:
+        st.session_state["admin_ok"] = True
+        st.success("Acesso liberado!")
+    elif senha != "":
+        st.warning("Senha incorreta!")
+
+    if st.session_state["admin_ok"]:
+        # Carrega seleção antiga se houver
+        os_selecionados = []
+        if os.path.exists(PORTAL_FILE):
+            os_selecionados = pd.read_csv(PORTAL_FILE)["OS"].astype(str).tolist()
+
+        # Multi-select com visual amigável
+        opcoes = [
+            f'OS {row.OS} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row.get("Bairro","")} | {row["Nome Cliente"]}'
+            for _, row in df_rotas.iterrows()
+        ]
+        # Mapeamento OS <-> string
+        map_os_str = {
+            f'OS {row.OS} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row.get("Bairro","")} | {row["Nome Cliente"]}': str(row.OS)
+            for _, row in df_rotas.iterrows()
+        }
+
+        selecao = st.multiselect(
+            "Selecione os atendimentos para exibir no portal (apenas futuros):",
+            opcoes,
+            default=[k for k, v in map_os_str.items() if v in os_selecionados]
+        )
+
+        # Salva seleção
+        if st.button("Salvar atendimentos disponíveis no portal"):
+            escolhidos = [map_os_str[s] for s in selecao]
+            pd.DataFrame({"OS": escolhidos}).to_csv(PORTAL_FILE, index=False)
+            st.success("Lista de atendimentos do portal atualizada!")
+            st.experimental_rerun()
+
+# Leitura dos atendimentos do portal
+os_exibir = []
+if os.path.exists(PORTAL_FILE):
+    os_exibir = pd.read_csv(PORTAL_FILE)["OS"].astype(str).tolist()
+
+st.markdown("""
+    <div style="color:#555; font-size:1.15rem; margin-bottom:14px;">
+        Consulte abaixo os <b>atendimentos disponíveis</b> para aceite!
+    </div>
+    """, unsafe_allow_html=True)
+
+# Exibição visual dos cards dos atendimentos disponíveis
+cards = []
+for _, row in df_rotas[df_rotas["OS"].astype(str).isin(os_exibir)].iterrows():
+    servico = row.get("Serviço", "")
+    bairro = row.get("Bairro", "")
+    data = row.get("Data 1 Formatada", "")
+    dia_semana = row.get("Dia da Semana", "")
+    horas_servico = row.get("Horas de serviço", "")
+    hora_entrada = row.get("Hora de entrada", "")
+    referencia = row.get("Ponto de Referencia", "")
+    osid = row.get("OS", "")
+    cliente = row.get("Nome Cliente", "")
+    mensagem = (
+        f"Aceito a OS {osid} do atendimento de {servico} no bairro {bairro}, "
+        f"para o dia {dia_semana}, {data}. "
+        f"Horário de entrada: {hora_entrada}"
+    )
+    mensagem_url = urllib.parse.quote(mensagem)
+    celular = "31995265364"  # Se quiser usar de cada cliente, trocar aqui
+    whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
+
+    cards.append(f"""
+        <div style="
+            background: #fff;
+            border: 1.5px solid #eee;
+            border-radius: 18px;
+            padding: 24px 22px 16px 22px;
+            margin: 18px;
+            min-width: 300px;
+            max-width: 380px;
+            color: #00008B;
+            font-family: Arial, sans-serif;
+            box-shadow:0 2px 7px 0 #18d96b18;
+        ">
+            <div style="font-size:1.35em; font-weight:bold; color:#00008B; margin-bottom:2px;">
+                {servico}
+            </div>
+            <div style="font-size:1.10em; color:#00008B; margin-bottom:8px;">
+                <b style="color:#00008B;">Bairro:</b> <span style="color:#00008B;">{bairro}</span>
+            </div>
+            <div style="font-size:1em; color:#00008B;">
+                <b style="color:#00008B;">Data:</b> <span style="color:#00008B;">{data} ({dia_semana})</span><br>
+                <b style="color:#00008B;">Duração do atendimento:</b> <span style="color:#00008B;">{horas_servico}</span><br>
+                <b style="color:#00008B;">Hora de entrada:</b> <span style="color:#00008B;">{hora_entrada}</span><br>
+                <b style="color:#00008B;">Ponto de Referência:</b> <span style="color:#00008B;">{referencia if referencia and referencia != 'nan' else '-'}</span><br>
+                <b style="color:#00008B;">Cliente:</b> <span style="color:#00008B;">{cliente}</span>
+            </div>
+            <a href="{whatsapp_url}" target="_blank">
+                <button style="margin-top:18px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.07em; font-weight:700;cursor:pointer; width:100%;">
+                    Aceitar Atendimento no WhatsApp
+                </button>
+            </a>
+        </div>
+        """)
+
+if cards:
+    st.markdown(
+        f"<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px;'>{''.join(cards)}</div>",
+        unsafe_allow_html=True
+    )
+else:
+    st.info("Nenhum atendimento disponível no portal no momento.")
+
+
+
+
+with tabs[2]:
     if os.path.exists(ROTAS_FILE):
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
@@ -807,7 +980,7 @@ with tabs[1]:
     else:
         st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
 
-with tabs[2]:
+with tabs[3]:
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
