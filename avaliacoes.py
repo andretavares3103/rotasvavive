@@ -820,11 +820,24 @@ with tabs[2]:
             aceites_do_dia.set_index('OS')['Aceitou']
         )
         df_status['Aceite'] = df_status['Aceite'].fillna("Pendente")
-        df_status['Aceite'] = df_status['Aceite'].replace({True: 'Sim', False: 'Não'})
-        df_status['Aceite'] = df_status['Aceite'].apply(lambda x: 'Aceita' if x == 'Sim' else 'Pendente')
+        def classificar_aceite(valor):
+            if str(valor).strip().lower() == "sim":
+                return "Aceita"
+            elif str(valor).strip().lower() == "não":
+                return "Recusada"
+            else:
+                return "Pendente"
+        df_status['Aceite'] = df_status['Aceite'].apply(classificar_aceite)
+
         n_aceitas = (df_status['Aceite'] == 'Aceita').sum()
+        n_recusadas = (df_status['Aceite'] == 'Recusada').sum()
         n_pendentes = (df_status['Aceite'] == 'Pendente').sum()
         total_os = len(df_status)
+        st.write(f"**Total de OS:** {total_os}")
+        st.write(f"**Aceitas:** {n_aceitas}")
+        st.write(f"**Recusadas:** {n_recusadas}")
+        st.write(f"**Pendentes:** {n_pendentes}")
+
         st.markdown("### Resumo de Aceites do Dia")
         st.write(f"**Total de OS:** {total_os}")
         st.write(f"**Aceitas:** {n_aceitas}")
