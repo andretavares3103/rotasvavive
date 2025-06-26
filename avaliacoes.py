@@ -848,18 +848,19 @@ with tabs[2]:
         df_qtd_aceites = df_qtd_aceites.sort_values("OS")
         
         st.markdown("### Indicador: Quantidade de Aceites por OS")
-        from st_aggrid import AgGrid, GridOptionsBuilder
         
-        gb = GridOptionsBuilder.from_dataframe(df_qtd_aceites)
-        gb.configure_column("OS", width=100)
-        gb.configure_column("Qtd Aceites", width=120)
-        grid_options = gb.build()
-        AgGrid(
-            df_qtd_aceites,
-            gridOptions=grid_options,
-            height=300,
-            fit_columns_on_grid_load=True
-        )
+        custom_css = """
+        <style>
+        th, td {
+            min-width: 80px !important;
+            max-width: 100px !important;
+            text-align: center !important;
+        }
+        </style>
+        """
+        st.markdown(custom_css, unsafe_allow_html=True)
+        st.markdown(df_qtd_aceites.to_html(index=False), unsafe_allow_html=True)
+
         # ---------- FIM DO BLOCO DE INDICADOR ----------
 
 
