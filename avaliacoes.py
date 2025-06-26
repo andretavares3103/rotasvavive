@@ -539,6 +539,16 @@ def pipeline(file_path, output_dir):
         ])
     df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
 
+    #RETIRAR DEPOIS
+
+    print("Colunas geradas:", df_matriz_rotas.columns.tolist())
+    if df_matriz_rotas.empty:
+    st.error("Nenhuma linha foi gerada na matriz de rotas! Verifique se há atendimentos futuros na sua planilha.")
+    st.stop()
+else:
+    st.write("Colunas da matriz:", df_matriz_rotas.columns.tolist())
+
+
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
     with pd.ExcelWriter(final_path, engine='xlsxwriter') as writer:
         df_matriz_rotas.to_excel(writer, sheet_name="Rotas", index=False)
