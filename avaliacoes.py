@@ -23,7 +23,14 @@ def exibe_formulario_aceite(os_id):
     if st.button("Enviar Aceite"):
         salvar_aceite(os_id, profissional, telefone, aceitou)
         st.session_state[f'aceite_ok_{os_id}'] = True
-        st.experimental_rerun()
+        # Só chama rerun se não estiver em ciclo de query_params (evita crash)
+        if not st.session_state.get('already_rerun', False):
+            st.session_state['already_rerun'] = True
+            st.experimental_rerun()
+        else:
+            st.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+            st.stop()
+
 
 
 def salvar_aceite(os_id, profissional, telefone, aceitou):
@@ -116,8 +123,7 @@ Temos uma oportunidade especial para você dentro da sua rota!
 🕒 *Hora de entrada:* {hora_entrada}
 ⏱️ *Duração do Atendimento:* {duracao}
 📍 *Endereço:* {endereco_str}
-📍 *Bairro:* {bairro}
-🏙️ *Cidade:* {cidade}
+📍 *Bairro/Cidade:* {bairro} - {cidade}
 💬 *Observações do Atendimento:* {obs_prestador}
 *GOOGLE MAPAS* {"🌎 (" + maps_url + ")" if maps_url else ""}
 {fechamento}
