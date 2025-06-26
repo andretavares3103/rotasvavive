@@ -823,34 +823,35 @@ with tabs[2]:
             how="left", on="OS"
         )
 
-        # ---------- BLOCO DE INDICADOR: Quantos aceites por OS ----------
-        # Filtrar pelas datas do atendimento (Data 1)
+        
+        # ---------- BLOCO DE INDICADOR: Quantos aceites SIM por OS ----------
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data do atendimento", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
-        
-        # Seleciona OS do dia/filtro
         df_rotas_sel = df_rotas.copy()
         if data_sel != "Todos":
             df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date.astype(str) == data_sel]
         else:
             hoje = datetime.now().date()
             df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
-        
         os_do_dia = df_rotas_sel["OS"].astype(str).unique()
-        
-        # Seleciona aceites dessas OS
         aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
         
-        # Conta quantos aceites por OS (pode ser "Sim" ou "Não")
-        qtd_aceites_por_os = aceites_do_dia.groupby("OS").size()
+        # Normaliza colunas OS
+        df_rotas_sel["OS"] = df_rotas_sel["OS"].astype(str).str.strip()
+        aceites_do_dia["OS"] = aceites_do_dia["OS"].astype(str).str.strip()
         
-        # Garante que todas as OS aparecem (com zero se não houve aceite)
+        # Só aceita SIM
+        aceites_sim = aceites_do_dia[aceites_do_dia["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
+        qtd_aceites_por_os = aceites_sim.groupby("OS").size()
+        
         df_qtd_aceites = pd.DataFrame({'OS': os_do_dia})
         df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
         df_qtd_aceites = df_qtd_aceites.sort_values("OS")
         
         st.markdown("### Indicador: Quantidade de Aceites por OS")
         st.dataframe(df_qtd_aceites, use_container_width=True)
+# ---------- FIM DO BLOCO DE INDICADOR ----------
+
         # ---------- FIM DO BLOCO DE INDICADOR ----------
 
 
