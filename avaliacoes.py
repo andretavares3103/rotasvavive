@@ -512,6 +512,16 @@ def pipeline(file_path, output_dir):
 
     df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
 
+
+    #RETIRAR DEPOIS
+    st.write("Shape da matriz:", df_matriz_rotas.shape)
+    st.write("Colunas encontradas:", df_matriz_rotas.columns.tolist())
+   
+    if df_matriz_rotas.empty:
+        st.error("Nenhuma linha foi gerada na matriz de rotas! Verifique se há atendimentos futuros na sua planilha.")
+    st.stop()
+ ------------------------------------
+
     for i in range(1, 21):
         if f"Classificação da Profissional {i}" not in df_matriz_rotas.columns:
             df_matriz_rotas[f"Classificação da Profissional {i}"] = pd.NA
