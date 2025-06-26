@@ -746,7 +746,35 @@ def pipeline(file_path, output_dir):
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
-tabs = st.tabs(["Upload de Arquivo", "Matriz de Rotas", "Aceites"])
+tabs = st.tabs(["Upload de Arquivo", "Portal de Atendimentos", "Matriz de Rotas", "Aceites"])
+with tabs[1]:
+    st.header("Portal de Atendimentos")
+
+    # Aqui você já tem o arquivo de rotas gerado, então pode usar:
+    if os.path.exists(ROTAS_FILE):
+        df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
+        # Filtros básicos para o portal:
+        datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
+        data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_portal")
+        clientes = df_rotas["Nome Cliente"].dropna().unique()
+        cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_portal")
+        # Filtrar DataFrame conforme seleção
+        df_portal = df_rotas.copy()
+        if data_sel != "Todos":
+            df_portal = df_portal[df_portal["Data 1"].dt.date.astype(str) == data_sel]
+        if cliente_sel != "Todos":
+            df_portal = df_portal[df_portal["Nome Cliente"] == cliente_sel]
+        # Exibir resumo em cards ou tabela:
+        for idx, row in df_portal.iterrows():
+            with st.expander(f"OS {row['OS']} - {row['Nome Cliente']} - {row['Serviço']}"):
+                st.write(f"**Data:** {row['Data 1'].strftime('%d/%m/%Y') if not pd.isnull(row['Data 1']) else ''}")
+                st.write(f"**Hora de entrada:** {row['Hora de entrada']}")
+                st.write(f"**Serviço:** {row['Serviço']}")
+                st.write(f"**Bairro:** {row['Ponto de Referencia']}")
+                st.write(f"**Mensagem:** {row['Mensagem Padrão']}")
+                # Botão para aceitar pode ser simulado como apenas visualização, pois o aceite real é via link
+    else:
+        st.info("Faça o upload e aguarde o processamento para liberar o portal de atendimentos.")
 
 with tabs[0]:
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
@@ -775,7 +803,7 @@ with tabs[0]:
                 except Exception as e:
                     st.error(f"Erro no processamento: {e}")
 
-with tabs[1]:
+with tabs[2]:
     if os.path.exists(ROTAS_FILE):
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
@@ -807,7 +835,7 @@ with tabs[1]:
     else:
         st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
 
-with tabs[2]:
+with tabs[3]:
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
