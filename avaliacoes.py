@@ -803,47 +803,36 @@ with tabs[2]:
             how="left", on="OS"
         )
 
-        # ---------- BLOCO DE RESUMO ----------
-        datas = df_aceites_completo["Data 1"].dropna().sort_values().dt.date.unique()
-        data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
-        # Resumo de OS do dia
+        # ---------- BLOCO DE INDICADOR: Quantos aceites por OS ----------
+        # Filtrar pelas datas do atendimento (Data 1)
+        datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
+        data_sel = st.selectbox("Filtrar por data do atendimento", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
+        
+        # Seleciona OS do dia/filtro
         df_rotas_sel = df_rotas.copy()
         if data_sel != "Todos":
             df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date.astype(str) == data_sel]
         else:
             hoje = datetime.now().date()
             df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
+        
         os_do_dia = df_rotas_sel["OS"].astype(str).unique()
+        
+        # Seleciona aceites dessas OS
         aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
-        df_status = pd.DataFrame({'OS': os_do_dia})
-        df_status['Aceite'] = df_status['OS'].map(
-            aceites_do_dia.set_index('OS')['Aceitou']
-        )
-        df_status['Aceite'] = df_status['Aceite'].fillna("Pendente")
-        def classificar_aceite(valor):
-            if str(valor).strip().lower() == "sim":
-                return "Aceita"
-            elif str(valor).strip().lower() == "não":
-                return "Recusada"
-            else:
-                return "Pendente"
-        df_status['Aceite'] = df_status['Aceite'].apply(classificar_aceite)
+        
+        # Conta quantos aceites por OS (pode ser "Sim" ou "Não")
+        qtd_aceites_por_os = aceites_do_dia.groupby("OS").size()
+        
+        # Garante que todas as OS aparecem (com zero se não houve aceite)
+        df_qtd_aceites = pd.DataFrame({'OS': os_do_dia})
+        df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
+        df_qtd_aceites = df_qtd_aceites.sort_values("OS")
+        
+        st.markdown("### Indicador: Quantidade de Aceites por OS")
+        st.dataframe(df_qtd_aceites, use_container_width=True)
+        # ---------- FIM DO BLOCO DE INDICADOR ----------
 
-        n_aceitas = (df_status['Aceite'] == 'Aceita').sum()
-        n_recusadas = (df_status['Aceite'] == 'Recusada').sum()
-        n_pendentes = (df_status['Aceite'] == 'Pendente').sum()
-        total_os = len(df_status)
-        st.write(f"**Total de OS:** {total_os}")
-        st.write(f"**Aceitas:** {n_aceitas}")
-        st.write(f"**Recusadas:** {n_recusadas}")
-        st.write(f"**Pendentes:** {n_pendentes}")
-
-        st.markdown("### Resumo de Aceites do Dia")
-        st.write(f"**Total de OS:** {total_os}")
-        st.write(f"**Aceitas:** {n_aceitas}")
-        st.write(f"**Pendentes:** {n_pendentes}")
-        st.dataframe(df_status, use_container_width=True)
-        # ---------- FIM DO BLOCO DE RESUMO ----------
 
         # Filtros detalhados
         clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
