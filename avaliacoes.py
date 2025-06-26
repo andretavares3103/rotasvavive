@@ -747,6 +747,8 @@ with tabs[0]:
                             file_name="rotas_bh_dados_tratados_completos.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
+                        import shutil
+                        shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
                     else:
                         st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
                 except Exception as e:
