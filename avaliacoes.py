@@ -111,7 +111,6 @@ def gerar_mensagem_personalizada(
 O atendimento será confirmado após o aceite!
 *1)*    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
 *2)*    Lembre-se das nossas 3 confirmações do atendimento!
-*CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO*
 
 Abs, Vavivê!
 """
@@ -123,7 +122,8 @@ Temos uma oportunidade especial para você dentro da sua rota!
 🕒 *Hora de entrada:* {hora_entrada}
 ⏱️ *Duração do Atendimento:* {duracao}
 📍 *Endereço:* {endereco_str}
-📍 *Bairro/Cidade:* {bairro} - {cidade}
+📍 *Bairro:* {bairro}
+🏙️ *Cidade:* {cidade}
 💬 *Observações do Atendimento:* {obs_prestador}
 *GOOGLE MAPAS* {"🌎 (" + maps_url + ")" if maps_url else ""}
 {fechamento}
