@@ -4,3 +4,4 @@ numpy
 openpyxl
 geopy
 xlsxwriter
+st-aggrid
