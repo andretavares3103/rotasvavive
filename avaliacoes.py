@@ -16,20 +16,29 @@ def exibe_formulario_aceite(os_id):
     if st.session_state.get(f'aceite_ok_{os_id}', False):
         st.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
         st.stop()
+
     st.header(f"Validação de Aceite (OS {os_id})")
     profissional = st.text_input("Nome da Profissional")
     telefone = st.text_input("Telefone para contato")
-    aceitou = st.checkbox("Aceito realizar este atendimento?")
-    if st.button("Enviar Aceite"):
-        salvar_aceite(os_id, profissional, telefone, aceitou)
-        st.session_state[f'aceite_ok_{os_id}'] = True
-        # Só chama rerun se não estiver em ciclo de query_params (evita crash)
-        if not st.session_state.get('already_rerun', False):
-            st.session_state['already_rerun'] = True
-            st.experimental_rerun()
-        else:
-            st.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
-            st.stop()
+
+    col1, col2 = st.columns(2)
+    aceite_respondido = False
+
+    with col1:
+        if st.button("Sim, aceito este atendimento"):
+            salvar_aceite(os_id, profissional, telefone, True)
+            st.session_state[f'aceite_ok_{os_id}'] = True
+            aceite_respondido = True
+    with col2:
+        if st.button("Não posso aceitar"):
+            salvar_aceite(os_id, profissional, telefone, False)
+            st.session_state[f'aceite_ok_{os_id}'] = True
+            aceite_respondido = True
+
+    if aceite_respondido:
+        st.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+        st.stop()
+
 
 
 
