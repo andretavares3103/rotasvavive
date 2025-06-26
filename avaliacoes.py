@@ -790,6 +790,9 @@ with tabs[1]:
 
 with tabs[2]:
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
+        import io
+        from datetime import datetime
+
         df_aceites = pd.read_excel(ACEITES_FILE)
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         df_aceites_completo = pd.merge(
@@ -799,18 +802,47 @@ with tabs[2]:
             ],
             how="left", on="OS"
         )
+
+        # ---------- BLOCO DE RESUMO ----------
         datas = df_aceites_completo["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
+        # Resumo de OS do dia
+        df_rotas_sel = df_rotas.copy()
+        if data_sel != "Todos":
+            df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date.astype(str) == data_sel]
+        else:
+            hoje = datetime.now().date()
+            df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
+        os_do_dia = df_rotas_sel["OS"].astype(str).unique()
+        aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
+        df_status = pd.DataFrame({'OS': os_do_dia})
+        df_status['Aceite'] = df_status['OS'].map(
+            aceites_do_dia.set_index('OS')['Aceitou']
+        )
+        df_status['Aceite'] = df_status['Aceite'].fillna("Pendente")
+        df_status['Aceite'] = df_status['Aceite'].replace({True: 'Sim', False: 'Não'})
+        df_status['Aceite'] = df_status['Aceite'].apply(lambda x: 'Aceita' if x == 'Sim' else 'Pendente')
+        n_aceitas = (df_status['Aceite'] == 'Aceita').sum()
+        n_pendentes = (df_status['Aceite'] == 'Pendente').sum()
+        total_os = len(df_status)
+        st.markdown("### Resumo de Aceites do Dia")
+        st.write(f"**Total de OS:** {total_os}")
+        st.write(f"**Aceitas:** {n_aceitas}")
+        st.write(f"**Pendentes:** {n_pendentes}")
+        st.dataframe(df_status, use_container_width=True)
+        # ---------- FIM DO BLOCO DE RESUMO ----------
+
+        # Filtros detalhados
         clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_aceite")
-        profissionais = df_aceites_completo["Profissional"].dropna().unique()
+        profissionais = df_aceites_completo["Profissional"].dropna().unique() if "Profissional" in df_aceites_completo else []
         profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + list(profissionais), key="prof_aceite")
         df_aceites_filt = df_aceites_completo.copy()
         if data_sel != "Todos":
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Data 1"].dt.date.astype(str) == data_sel]
         if cliente_sel != "Todos":
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Nome Cliente"] == cliente_sel]
-        if profissional_sel != "Todos":
+        if profissional_sel != "Todos" and "Profissional" in df_aceites_filt:
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Profissional"] == profissional_sel]
         st.dataframe(df_aceites_filt, use_container_width=True)
         output = io.BytesIO()
@@ -818,18 +850,21 @@ with tabs[2]:
         st.download_button(
             label="Baixar histórico de aceites (completo)",
             data=output.getvalue(),
-            file_name="aceites_completo.xlsx"
+            file_name="aceites_completo.xlsx",
+            key="download_aceites_completo"
         )
     elif os.path.exists(ACEITES_FILE):
+        import io
         df_aceites = pd.read_excel(ACEITES_FILE)
         st.dataframe(df_aceites)
         output = io.BytesIO()
         df_aceites.to_excel(output, index=False)
         st.download_button(
-            label="Baixar histórico de aceites (completo)",
+            label="Baixar histórico de aceites",
             data=output.getvalue(),
-            file_name="aceites_completo.xlsx",
-            key="download_aceites_completo"
+            file_name="aceites.xlsx",
+            key="download_aceites"
         )
     else:
         st.info("Nenhum aceite registrado ainda.")
+
