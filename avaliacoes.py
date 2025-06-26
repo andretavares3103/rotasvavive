@@ -15,8 +15,8 @@ ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
 def exibe_formulario_aceite(os_id):
     if st.session_state.get(f'aceite_ok_{os_id}', False):
         st.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
-        st.stop()
-
+        st.stop()  # Interrompe o app e só mostra a mensagem, NADA abaixo executa!
+    
     st.header(f"Validação de Aceite (OS {os_id})")
     profissional = st.text_input("Nome da Profissional")
     telefone = st.text_input("Telefone para contato")
@@ -28,12 +28,13 @@ def exibe_formulario_aceite(os_id):
         if st.button("Sim, aceito este atendimento"):
             salvar_aceite(os_id, profissional, telefone, True)
             st.session_state[f'aceite_ok_{os_id}'] = True
-            aceite_respondido = True
+            st.experimental_rerun()
     with col2:
         if st.button("Não posso aceitar"):
             salvar_aceite(os_id, profissional, telefone, False)
             st.session_state[f'aceite_ok_{os_id}'] = True
-            aceite_respondido = True
+            st.experimental_rerun()
+
 
     if aceite_respondido:
         st.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
