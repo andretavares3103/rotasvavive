@@ -13,14 +13,18 @@ ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
 
 def exibe_formulario_aceite(os_id):
+    if st.session_state.get(f'aceite_ok_{os_id}', False):
+        st.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+        st.stop()
     st.header(f"Validação de Aceite (OS {os_id})")
     profissional = st.text_input("Nome da Profissional")
     telefone = st.text_input("Telefone para contato")
     aceitou = st.checkbox("Aceito realizar este atendimento?")
     if st.button("Enviar Aceite"):
         salvar_aceite(os_id, profissional, telefone, aceitou)
-        st.success("Obrigado! Daremos o retorno sobre o atendimento! Seu aceite foi registrado com sucesso.")
-        st.stop()
+        st.session_state[f'aceite_ok_{os_id}'] = True
+        st.experimental_rerun()
+
 
 def salvar_aceite(os_id, profissional, telefone, aceitou):
     agora = pd.Timestamp.now()
