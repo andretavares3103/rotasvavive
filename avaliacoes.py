@@ -847,7 +847,7 @@ with tabs[2]:
         df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
         df_qtd_aceites = df_qtd_aceites.sort_values("OS")
         
-         st.markdown("### Indicador: Quantidade de Aceites por OS")
+        st.markdown("### Indicador: Quantidade de Aceites por OS")
         from st_aggrid import AgGrid, GridOptionsBuilder
         
         gb = GridOptionsBuilder.from_dataframe(df_qtd_aceites)
