@@ -745,8 +745,10 @@ with tabs[0]:
                             label="📥 Baixar Excel consolidado",
                             data=open(excel_path, "rb").read(),
                             file_name="rotas_bh_dados_tratados_completos.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="download_excel_consolidado"
                         )
+
                         import shutil
                         shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
                     else:
@@ -824,9 +826,10 @@ with tabs[2]:
         output = io.BytesIO()
         df_aceites.to_excel(output, index=False)
         st.download_button(
-            label="Baixar histórico de aceites",
+            label="Baixar histórico de aceites (completo)",
             data=output.getvalue(),
-            file_name="aceites.xlsx"
+            file_name="aceites_completo.xlsx",
+            key="download_aceites_completo"
         )
     else:
         st.info("Nenhum aceite registrado ainda.")
