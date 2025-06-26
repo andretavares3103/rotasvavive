@@ -847,10 +847,19 @@ with tabs[2]:
         df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
         df_qtd_aceites = df_qtd_aceites.sort_values("OS")
         
-        st.markdown("### Indicador: Quantidade de Aceites por OS")
-        st.dataframe(df_qtd_aceites, use_container_width=True)
-# ---------- FIM DO BLOCO DE INDICADOR ----------
-
+         st.markdown("### Indicador: Quantidade de Aceites por OS")
+        from st_aggrid import AgGrid, GridOptionsBuilder
+        
+        gb = GridOptionsBuilder.from_dataframe(df_qtd_aceites)
+        gb.configure_column("OS", width=100)
+        gb.configure_column("Qtd Aceites", width=120)
+        grid_options = gb.build()
+        AgGrid(
+            df_qtd_aceites,
+            gridOptions=grid_options,
+            height=300,
+            fit_columns_on_grid_load=True
+        )
         # ---------- FIM DO BLOCO DE INDICADOR ----------
 
 
