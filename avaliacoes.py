@@ -13,34 +13,30 @@ ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
 
 def exibe_formulario_aceite(os_id):
-    if st.session_state.get(f'aceite_ok_{os_id}', False):
-        st.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
-        st.stop()
-
     st.header(f"Validação de Aceite (OS {os_id})")
     profissional = st.text_input("Nome da Profissional")
     telefone = st.text_input("Telefone para contato")
+    resposta = st.empty()  # para mensagem dinâmica
 
     col1, col2 = st.columns(2)
-    if "aceite_respondido" not in st.session_state:
-        st.session_state["aceite_respondido"] = False
+    aceite_submetido = False
 
     with col1:
         if st.button("Sim, aceito este atendimento"):
             salvar_aceite(os_id, profissional, telefone, True)
-            st.session_state[f'aceite_ok_{os_id}'] = True
-            st.session_state["aceite_respondido"] = True
+            resposta.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+            aceite_submetido = True
 
     with col2:
         if st.button("Não posso aceitar"):
             salvar_aceite(os_id, profissional, telefone, False)
-            st.session_state[f'aceite_ok_{os_id}'] = True
-            st.session_state["aceite_respondido"] = True
+            resposta.success("✅ Obrigado! Daremos retorno sobre o atendimento. Seu aceite foi registrado.")
+            aceite_submetido = True
 
-    # Mostra mensagem de sucesso **sem usar st.experimental_rerun**
-    if st.session_state["aceite_respondido"]:
-        st.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+    # Se quiser ocultar o formulário após aceite, basta colocar um return
+    if aceite_submetido:
         st.stop()
+
 
 
 
