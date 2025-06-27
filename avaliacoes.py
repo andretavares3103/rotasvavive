@@ -949,10 +949,6 @@ def formatar_hora(h):
     except:
         return str(h)
 
-import pandas as pd
-import urllib.parse
-import streamlit as st
-
 def formatar_hora(h):
     try:
         if pd.isnull(h) or h == "":
@@ -1086,3 +1082,17 @@ with tabs[3]:
                         <b style="color:#00008B;">Bairro:</b> <span style="color:#00008B;">{bairro}</span>
                     </div>
                     <div style="font-size:1em; color:#00008B;">
+                        <b style="color:#00008B;">Data:</b> <span style="color:#00008B;">{data} ({dia_semana})</span><br>
+                        <b style="color:#00008B;">Duração do atendimento:</b> <span style="color:#00008B;">{horas_servico}</span><br>
+                        <b style="color:#00008B;">Hora de entrada:</b> <span style="color:#00008B;">{hora_entrada}</span><br>
+                        <b style="color:#00008B;">Ponto de Referência:</b> <span style="color:#00008B;">{referencia if referencia and referencia != 'nan' else '-'}</span>
+                    </div>
+                    <a href="{whatsapp_url}" target="_blank">
+                        <button style="margin-top:18px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.07em; font-weight:700;cursor:pointer; width:100%;">
+                            Aceitar Atendimento no WhatsApp
+                        </button>
+                    </a>
+                </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.info("Faça upload do Excel para liberar seleção de atendimentos.")
