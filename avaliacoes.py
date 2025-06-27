@@ -17,7 +17,7 @@ if not st.session_state["autenticado"]:
     st.markdown("### Área Restrita: Digite a senha para acessar as abas")
     senha = st.text_input("Senha:", type="password")
     if st.button("Entrar"):
-        if senha == "SUA_SENHA_AQUI":
+        if senha == "vvv":
             st.session_state["autenticado"] = True
             st.experimental_rerun()
         else:
