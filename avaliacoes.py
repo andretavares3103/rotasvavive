@@ -795,7 +795,7 @@ def carregar_rotas(path):
 
 
 
-with tabs[1]:
+with tabs[0]:
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
         with st.spinner("Processando... Isso pode levar alguns segundos."):
@@ -822,7 +822,7 @@ with tabs[1]:
                 except Exception as e:
                     st.error(f"Erro no processamento: {e}")
 
-with tabs[2]:
+with tabs[1]:
     if os.path.exists(ROTAS_FILE):
         df_rotas = carregar_rotas(ROTAS_FILE)
 
@@ -855,7 +855,7 @@ with tabs[2]:
     else:
         st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
 
-with tabs[3]:
+with tabs[2]:
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
@@ -950,7 +950,7 @@ with tabs[3]:
         st.info("Nenhum aceite registrado ainda.")
 
 
-with tabs[0]:
+with tabs[3]:
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
             <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
