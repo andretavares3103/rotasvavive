@@ -956,9 +956,13 @@ with tabs[3]:
         df = carregar_clientes(ROTAS_FILE)
         df = df[df["ID Cliente"].notnull()]
         df = df.copy()
-    if "os_list" not in st.session_state:
-        st.session_state.os_list = []
-        if "Data 1" in df.columns:
+        if "os_list" not in st.session_state:
+            st.session_state.os_list = []
+        
+        # Aqui já pode garantir as colunas necessárias ANTES de qualquer filtro
+        if "Data 1" not in df.columns:
+            st.warning("A aba 'Clientes' não possui a coluna 'Data 1'. Corrija o arquivo antes de continuar.")
+            st.stop()
             df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
             df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
             dias_pt = {
