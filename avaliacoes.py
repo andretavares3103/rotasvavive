@@ -781,21 +781,25 @@ def pipeline(file_path, output_dir):
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
-tabs = st.tabs(["Upload de Arquivo", "Matriz de Rotas", "Aceites", "Portal de Atendimentos"])
+tabs = st.tabs([
+    "Upload de Arquivo", 
+    "Matriz de Rotas", 
+    "Aceites", 
+    "Portal de Atendimentos"
+])
 
-
-@st.cache_data(show_spinner="Carregando dados da aba Rotas...")
-def carregar_rotas(path):
-    return pd.read_excel(path, sheet_name="Rotas")
-
-
-
-
-
-
-
-
+# === ABA 0: UPLOAD DE ARQUIVO ===
 with tabs[0]:
+    if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
+        st.warning("Área restrita. Digite a senha para acessar.")
+        senha = st.text_input("Senha:", type="password", key="senha0")
+        if st.button("Entrar", key="btn0"):
+            if senha == "vvv":
+                st.session_state["autenticado"] = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta!")
+        st.stop()
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
         with st.spinner("Processando... Isso pode levar alguns segundos."):
@@ -822,10 +826,20 @@ with tabs[0]:
                 except Exception as e:
                     st.error(f"Erro no processamento: {e}")
 
+# === ABA 1: MATRIZ DE ROTAS ===
 with tabs[1]:
+    if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
+        st.warning("Área restrita. Digite a senha para acessar.")
+        senha = st.text_input("Senha:", type="password", key="senha1")
+        if st.button("Entrar", key="btn1"):
+            if senha == "vvv":
+                st.session_state["autenticado"] = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta!")
+        st.stop()
     if os.path.exists(ROTAS_FILE):
         df_rotas = carregar_rotas(ROTAS_FILE)
-
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_rotas")
         clientes = df_rotas["Nome Cliente"].dropna().unique()
@@ -855,14 +869,23 @@ with tabs[1]:
     else:
         st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
 
+# === ABA 2: ACEITES ===
 with tabs[2]:
+    if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
+        st.warning("Área restrita. Digite a senha para acessar.")
+        senha = st.text_input("Senha:", type="password", key="senha2")
+        if st.button("Entrar", key="btn2"):
+            if senha == "vvv":
+                st.session_state["autenticado"] = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta!")
+        st.stop()
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
-
         df_aceites = carregar_aceites(ACEITES_FILE)
         df_rotas = carregar_rotas(ROTAS_FILE)
-        
         df_aceites_completo = pd.merge(
             df_aceites, df_rotas[
                 ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
@@ -870,9 +893,6 @@ with tabs[2]:
             ],
             how="left", on="OS"
         )
-
-        
-        # ---------- BLOCO DE INDICADOR: Quantos aceites SIM por OS ----------
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data do atendimento", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
         df_rotas_sel = df_rotas.copy()
@@ -883,37 +903,15 @@ with tabs[2]:
             df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
         os_do_dia = df_rotas_sel["OS"].astype(str).unique()
         aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
-        
-        # Normaliza colunas OS
         df_rotas_sel["OS"] = df_rotas_sel["OS"].astype(str).str.strip()
         aceites_do_dia["OS"] = aceites_do_dia["OS"].astype(str).str.strip()
-        
-        # Só aceita SIM
         aceites_sim = aceites_do_dia[aceites_do_dia["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
         qtd_aceites_por_os = aceites_sim.groupby("OS").size()
-        
         df_qtd_aceites = pd.DataFrame({'OS': os_do_dia})
         df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
         df_qtd_aceites = df_qtd_aceites.sort_values("OS")
-        
         st.markdown("### Indicador: Quantidade de Aceites por OS")
-        
-        custom_css = """
-        <style>
-        th, td {
-            min-width: 80px !important;
-            max-width: 100px !important;
-            text-align: center !important;
-        }
-        </style>
-        """
-        st.markdown(custom_css, unsafe_allow_html=True)
         st.markdown(df_qtd_aceites.to_html(index=False), unsafe_allow_html=True)
-
-        # ---------- FIM DO BLOCO DE INDICADOR ----------
-
-
-        # Filtros detalhados
         clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_aceite")
         profissionais = df_aceites_completo["Profissional"].dropna().unique() if "Profissional" in df_aceites_completo else []
@@ -949,7 +947,7 @@ with tabs[2]:
     else:
         st.info("Nenhum aceite registrado ainda.")
 
-
+# === ABA 3: PORTAL DE ATENDIMENTOS (sem senha para visualizar, senha só para admin liberar atendimentos) ===
 with tabs[3]:
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
@@ -960,12 +958,10 @@ with tabs[3]:
             Consulte abaixo os atendimentos disponíveis!
         </p>
         """, unsafe_allow_html=True)
-
     if not os.path.exists(ROTAS_FILE):
         st.info("Faça upload e processe o Excel para liberar o portal.")
     else:
-        # 1️⃣ Lê a aba Clientes do arquivo existente (já carregado no app)
-        df = carregar_rotas(ROTAS_FILE)  # usa cache
+        df = carregar_rotas(ROTAS_FILE)
         df = df[df["Data 1"].notnull()]
         df["Data 1"] = pd.to_datetime(df["Data 1"])
         df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
@@ -978,58 +974,31 @@ with tabs[3]:
         df = df.copy()
         if "os_list" not in st.session_state:
             st.session_state.os_list = []
-        
-        # Aqui já pode garantir as colunas necessárias ANTES de qualquer filtro
-        if "Data 1" not in df.columns:
-            st.warning("A aba 'Clientes' não possui a coluna 'Data 1'. Corrija o arquivo antes de continuar.")
-            st.stop()
-            df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-            df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
-            dias_pt = {
-                "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
-                "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
-            }
-            df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
-        else:
-            df["Data 1 Formatada"] = "-"
-            df["Dia da Semana"] = "-"
-
-        # 2️⃣ Seletor protegido por senha para admins
-# ---- BLOCO DE SENHA ADMIN ----
-        if "exibir_admin" not in st.session_state:
-            st.session_state.exibir_admin = False
-        
-        senha = st.text_input("Área Administrativa - digite a senha para selecionar OS", type="password", value="")
-        if st.button("Liberar seleção de atendimentos (admin)"):
-            if senha == "vvv":
-                st.session_state.exibir_admin = True
+        # === BLOCO DE SELEÇÃO DE ATENDIMENTOS (SÓ ADMIN) ===
+        st.markdown("---")
+        st.markdown("**Área Administrativa - Selecione atendimentos visíveis (admin)**")
+        senha_admin = st.text_input("Senha Admin:", type="password", key="senha_admin_portal")
+        if st.button("Liberar seleção de atendimentos", key="btn_portal"):
+            if senha_admin == "vvv":
+                st.session_state.exibir_admin_portal = True
             else:
-                st.warning("Senha incorreta.")
-        
-        # ---- BLOCO DE SELEÇÃO DE ATENDIMENTOS (APÓS A SENHA) ----
-        if st.session_state.exibir_admin:
-            if "os_list" not in st.session_state:
-                st.session_state.os_list = []
-        
+                st.warning("Senha incorreta!")
+        if st.session_state.get("exibir_admin_portal", False):
             os_opcoes = [
                 f'{row["Nome Cliente"]} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Plano"]}'
                 for idx, row in df.iterrows()
             ]
             os_ids = list(df["OS"])
-        
             os_selecionadas = st.multiselect(
                 "Selecione os atendimentos para exibir",
                 options=os_ids,
                 format_func=lambda x: os_opcoes[os_ids.index(x)],
                 default=st.session_state.os_list
             )
-        
-            if st.button("Salvar lista de OS exibidas"):
+            if st.button("Salvar lista de OS exibidas", key="salvar_portal"):
                 st.session_state.os_list = os_selecionadas
                 st.success("Seleção salva!")
-        
-
-        # Exibe sempre os cards das OS permitidas
+        # === FIM DO BLOCO DE SELEÇÃO ADMIN ===
         df_visiveis = df[df["OS"].isin(st.session_state.os_list)].copy()
         if df_visiveis.empty:
             st.info("Nenhum atendimento disponível para exibição.")
@@ -1051,7 +1020,6 @@ with tabs[3]:
                 mensagem_url = urllib.parse.quote(mensagem)
                 celular = "31995265364"
                 whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
-
                 st.markdown(f"""
                 <div style="
                     background: #fff;
