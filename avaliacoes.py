@@ -773,7 +773,7 @@ if "rotas_file_path" not in st.session_state:
 if "df_rotas" not in st.session_state:
     st.session_state.df_rotas = None
 
-
+uploaded_file = None
 
 tabs = st.tabs([
     "Upload de Arquivo", 
@@ -821,47 +821,42 @@ with tabs[0]:
 
 
 # === ABA 1: MATRIZ DE ROTAS ===
-with tabs[1]:
+with tabs[0]:
     if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
         st.warning("Área restrita. Digite a senha para acessar.")
-        senha = st.text_input("Senha:", type="password", key="senha1")
-        if st.button("Entrar", key="btn1"):
+        senha = st.text_input("Senha:", type="password", key="senha0")
+        if st.button("Entrar", key="btn0"):
             if senha == "vvv":
                 st.session_state["autenticado"] = True
                 st.rerun()
             else:
                 st.error("Senha incorreta!")
         st.stop()
-    if os.path.exists(ROTAS_FILE):
-        df_rotas = carregar_rotas(ROTAS_FILE)
-        datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
-        data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_rotas")
-        clientes = df_rotas["Nome Cliente"].dropna().unique()
-        cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_rotas")
-        profissionais = []
-        for i in range(1, 21):
-            profissionais.extend(df_rotas[f"Nome Prestador {i}"].dropna().unique())
-        profissionais = list(set([p for p in profissionais if isinstance(p, str)]))
-        profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + profissionais, key="prof_rotas")
-        df_rotas_filt = df_rotas.copy()
-        if data_sel != "Todos":
-            df_rotas_filt = df_rotas_filt[df_rotas_filt["Data 1"].dt.date.astype(str) == data_sel]
-        if cliente_sel != "Todos":
-            df_rotas_filt = df_rotas_filt[df_rotas_filt["Nome Cliente"] == cliente_sel]
-        if profissional_sel != "Todos":
-            mask = False
-            for i in range(1, 21):
-                mask |= (df_rotas_filt[f"Nome Prestador {i}"] == profissional_sel)
-            df_rotas_filt = df_rotas_filt[mask]
-        st.dataframe(df_rotas_filt, use_container_width=True)
-        st.download_button(
-            label="📥 Baixar Excel consolidado",
-            data=open(ROTAS_FILE, "rb").read(),
-            file_name="rotas_bh_dados_tratados_completos.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    else:
-        st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
+
+    # Upload de arquivo fica fora do bloco de senha
+    uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
+    
+    if uploaded_file:
+        # Grava arquivo em bytes para não depender de caminho no disco
+        file_bytes = uploaded_file.read()
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_path = os.path.join(tempdir, "input.xlsx")
+            with open(temp_path, "wb") as f:
+                f.write(file_bytes)
+            try:
+                excel_path = pipeline(temp_path, tempdir)  # Seu pipeline salva o Excel final nesse caminho
+                # Em vez de salvar caminho, carrega o DataFrame da aba Rotas
+                df_matriz_rotas = pd.read_excel(excel_path, sheet_name="Rotas")
+                st.session_state.df_matriz_rotas = df_matriz_rotas.copy()
+                st.success("Processamento finalizado com sucesso!")
+                # Botão de download se quiser
+                st.download_button(
+                    label="Baixar Excel consolidado",
+                    data=open(excel_path, "rb").read(),
+                    file_name="rotas_bh_dados_tratados_completos.xlsx"
+                )
+            except Exception as e:
+                st.error(f"Erro no processamento: {e}")
 
 # === ABA 2: ACEITES ===
 with tabs[2]:
