@@ -8,16 +8,22 @@ from geopy.distance import geodesic
 import tempfile
 import io
 
+st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
+
+# BLOCO DE AUTENTICAÇÃO POR SENHA
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
-# Sempre mostra a aba Portal de Atendimentos, as outras só se autenticado
-abas_portal = ["Portal de Atendimentos"]
-abas_admin = ["Upload de Arquivo", "Matriz de Rotas", "Aceites"]
-abas = abas_admin + abas_portal if st.session_state["autenticado"] else abas_portal
-
-tabs = st.tabs(abas)
-
+if not st.session_state["autenticado"]:
+    st.markdown("### Área Restrita: Digite a senha para acessar as abas")
+    senha = st.text_input("Senha:", type="password")
+    if st.button("Entrar"):
+        if senha == "vvv":
+            st.session_state["autenticado"] = True
+            st.rerun()
+        else:
+            st.error("Senha incorreta!")
+    st.stop()
 #-----------------------------------------------------------------------
 
 
@@ -945,7 +951,6 @@ with tabs[2]:
 
 
 with tabs[3]:
-    # Cabeçalho bonito usando HTML
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
             <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
@@ -956,12 +961,11 @@ with tabs[3]:
         </p>
         """, unsafe_allow_html=True)
 
-    # Carregamento do DataFrame
     if not os.path.exists(ROTAS_FILE):
         st.info("Faça upload e processe o Excel para liberar o portal.")
-        df = None
     else:
-        df = carregar_rotas(ROTAS_FILE)
+        # 1️⃣ Lê a aba Clientes do arquivo existente (já carregado no app)
+        df = carregar_rotas(ROTAS_FILE)  # usa cache
         df = df[df["Data 1"].notnull()]
         df["Data 1"] = pd.to_datetime(df["Data 1"])
         df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
@@ -974,9 +978,58 @@ with tabs[3]:
         df = df.copy()
         if "os_list" not in st.session_state:
             st.session_state.os_list = []
+        
+        # Aqui já pode garantir as colunas necessárias ANTES de qualquer filtro
+        if "Data 1" not in df.columns:
+            st.warning("A aba 'Clientes' não possui a coluna 'Data 1'. Corrija o arquivo antes de continuar.")
+            st.stop()
+            df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
+            df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
+            dias_pt = {
+                "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
+                "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
+            }
+            df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
+        else:
+            df["Data 1 Formatada"] = "-"
+            df["Dia da Semana"] = "-"
 
-    # Sempre exibe cards dos disponíveis
-    if df is not None:
+        # 2️⃣ Seletor protegido por senha para admins
+# ---- BLOCO DE SENHA ADMIN ----
+        if "exibir_admin" not in st.session_state:
+            st.session_state.exibir_admin = False
+        
+        senha = st.text_input("Área Administrativa - digite a senha para selecionar OS", type="password", value="")
+        if st.button("Liberar seleção de atendimentos (admin)"):
+            if senha == "vvv":
+                st.session_state.exibir_admin = True
+            else:
+                st.warning("Senha incorreta.")
+        
+        # ---- BLOCO DE SELEÇÃO DE ATENDIMENTOS (APÓS A SENHA) ----
+        if st.session_state.exibir_admin:
+            if "os_list" not in st.session_state:
+                st.session_state.os_list = []
+        
+            os_opcoes = [
+                f'{row["Nome Cliente"]} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Plano"]}'
+                for idx, row in df.iterrows()
+            ]
+            os_ids = list(df["OS"])
+        
+            os_selecionadas = st.multiselect(
+                "Selecione os atendimentos para exibir",
+                options=os_ids,
+                format_func=lambda x: os_opcoes[os_ids.index(x)],
+                default=st.session_state.os_list
+            )
+        
+            if st.button("Salvar lista de OS exibidas"):
+                st.session_state.os_list = os_selecionadas
+                st.success("Seleção salva!")
+        
+
+        # Exibe sempre os cards das OS permitidas
         df_visiveis = df[df["OS"].isin(st.session_state.os_list)].copy()
         if df_visiveis.empty:
             st.info("Nenhum atendimento disponível para exibição.")
@@ -991,10 +1044,9 @@ with tabs[3]:
                 hora_entrada = row.get("Hora de entrada", "")
                 referencia = row.get("Ponto de Referencia", "")
                 nome_cliente = row.get("Nome Cliente", "")
-                plano = row.get("Plano", "")
                 mensagem = (
                     f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
-                    f"dia {dia_semana}, {data}. Horário de entrada: {hora_entrada} (Plano: {plano})"
+                    f"dia {dia_semana}, {data}. Horário de entrada: {hora_entrada}"
                 )
                 mensagem_url = urllib.parse.quote(mensagem)
                 celular = "31995265364"
@@ -1018,7 +1070,6 @@ with tabs[3]:
                     <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
                         <b style="color:#00008B;">Cliente:</b> <span>{nome_cliente}</span>
                         <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
-                        <b style="color:#00008B;margin-left:24px">Plano:</b> <span>{plano}</span>
                     </div>
                     <div style="font-size:0.95em; color:#00008B;">
                         <b>Data:</b> <span>{data} ({dia_semana})</span><br>
@@ -1033,30 +1084,3 @@ with tabs[3]:
                     </a>
                 </div>
                 """, unsafe_allow_html=True)
-
-    # Bloco de senha e admin
-    if "exibir_admin" not in st.session_state:
-        st.session_state.exibir_admin = False
-
-    senha = st.text_input("Área Administrativa - digite a senha para selecionar OS", type="password")
-    if st.button("Liberar seleção de atendimentos (admin)"):
-        if senha == "vvv":
-            st.session_state.exibir_admin = True
-        else:
-            st.warning("Senha incorreta.")
-
-    if st.session_state.exibir_admin and df is not None:
-        os_opcoes = [
-            f'{row["Nome Cliente"]} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Plano"]}'
-            for idx, row in df.iterrows()
-        ]
-        os_ids = list(df["OS"])
-        os_selecionadas = st.multiselect(
-            "Selecione os atendimentos para exibir",
-            options=os_ids,
-            format_func=lambda x: os_opcoes[os_ids.index(x)],
-            default=st.session_state.os_list
-        )
-        if st.button("Salvar lista de OS exibidas"):
-            st.session_state.os_list = os_selecionadas
-            st.success("Seleção salva!")
