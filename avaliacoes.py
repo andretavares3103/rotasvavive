@@ -783,6 +783,18 @@ def pipeline(file_path, output_dir):
 
 tabs = st.tabs(["Upload de Arquivo", "Matriz de Rotas", "Aceites", "Portal de Atendimentos"])
 
+
+@st.cache_data(show_spinner="Carregando dados da aba Rotas...")
+def carregar_rotas(path):
+    return pd.read_excel(path, sheet_name="Rotas")
+
+
+
+
+
+
+
+
 with tabs[0]:
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
@@ -953,7 +965,7 @@ with tabs[3]:
         st.info("Faça upload e processe o Excel para liberar o portal.")
     else:
         # 1️⃣ Lê a aba Clientes do arquivo existente (já carregado no app)
-        df = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")  # ou "Atendimentos"
+        df = carregar_rotas(ROTAS_FILE)  # usa cache
         df = df[df["Data 1"].notnull()]
         df["Data 1"] = pd.to_datetime(df["Data 1"])
         df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
