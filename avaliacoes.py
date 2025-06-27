@@ -1035,7 +1035,9 @@ with tabs[3]:
                     # Limpa flags de admin (volta modo público)
                     st.session_state.exibir_admin_portal = False
                     st.session_state.admin_autenticado_portal = False
-                    st.experimental_rerun()
+                    st.rerun()
+
+
 
     # ----- BLOCO VISUALIZAÇÃO: TODOS USUÁRIOS -----
     if not st.session_state.exibir_admin_portal:
