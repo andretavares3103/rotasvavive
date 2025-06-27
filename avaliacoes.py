@@ -953,7 +953,15 @@ with tabs[3]:
         st.info("Faça upload e processe o Excel para liberar o portal.")
     else:
         # 1️⃣ Lê a aba Clientes do arquivo existente (já carregado no app)
-        df = carregar_clientes(ROTAS_FILE)
+        df = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")  # ou "Atendimentos"
+        df = df[df["Data 1"].notnull()]
+        df["Data 1"] = pd.to_datetime(df["Data 1"])
+        df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
+        dias_pt = {
+            "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
+            "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
+        }
+        df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
         df = df[df["ID Cliente"].notnull()]
         df = df.copy()
         if "os_list" not in st.session_state:
@@ -975,35 +983,39 @@ with tabs[3]:
             df["Dia da Semana"] = "-"
 
         # 2️⃣ Seletor protegido por senha para admins
+# ---- BLOCO DE SENHA ADMIN ----
         if "exibir_admin" not in st.session_state:
             st.session_state.exibir_admin = False
-        if "os_list" not in st.session_state:
-            st.session_state.os_list = []  # <- Começa vazio!
-
-        # Campo de senha e botão de desbloqueio
+        
         senha = st.text_input("Área Administrativa - digite a senha para selecionar OS", type="password", value="")
         if st.button("Liberar seleção de atendimentos (admin)"):
             if senha == "vvv":
                 st.session_state.exibir_admin = True
             else:
                 st.warning("Senha incorreta.")
-
-        # Admin pode selecionar quais OS ficam visíveis
+        
+        # ---- BLOCO DE SELEÇÃO DE ATENDIMENTOS (APÓS A SENHA) ----
         if st.session_state.exibir_admin:
+            if "os_list" not in st.session_state:
+                st.session_state.os_list = []
+        
             os_opcoes = [
-                f'Cliente {row["Nome Cliente"]} | {row["Data 1 Formatada"]} | {row["Bairro"]}'
+                f'{row["Nome Cliente"]} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Plano"]}'
                 for idx, row in df.iterrows()
             ]
-            os_ids = list(df["ID Cliente"])
+            os_ids = list(df["OS"])
+        
             os_selecionadas = st.multiselect(
-                "Selecione os clientes/atendimentos para exibir",
+                "Selecione os atendimentos para exibir",
                 options=os_ids,
                 format_func=lambda x: os_opcoes[os_ids.index(x)],
                 default=st.session_state.os_list
             )
+        
             if st.button("Salvar lista de OS exibidas"):
                 st.session_state.os_list = os_selecionadas
                 st.success("Seleção salva!")
+        
 
         # Exibe sempre os cards das OS permitidas
         df_visiveis = df[df["ID Cliente"].isin(st.session_state.os_list)].copy()
