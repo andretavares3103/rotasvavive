@@ -941,19 +941,6 @@ with tabs[2]:
         st.info("Nenhum aceite registrado ainda.")
 
 
-def formatar_hora(h):
-    try:
-        if pd.isnull(h) or h == "":
-            return ""
-        h_str = str(h).strip()
-        if ":" in h_str and len(h_str) == 8:
-            return h_str[:5]
-        if ":" in h_str and len(h_str) == 5:
-            return h_str
-        return pd.to_datetime(h_str).strftime("%H:%M")
-    except:
-        return str(h)
-
 import json
 import os
 import pandas as pd
@@ -989,57 +976,60 @@ with tabs[3]:
     if "exibir_admin_portal" not in st.session_state:
         st.session_state.exibir_admin_portal = False
 
+    # Botão para mostrar campos admin
     if st.button("Acesso admin para editar atendimentos do portal"):
         st.session_state.exibir_admin_portal = True
         st.rerun()
 
+    # Bloco ADMIN: upload, filtro, seleção
     if st.session_state.exibir_admin_portal:
         senha = st.text_input("Digite a senha de admin:", type="password", key="senha_portal_admin")
-        if st.button("Liberar upload e seleção"):
-            if senha == "vvv":
-                st.success("Acesso liberado! Faça o upload do arquivo Excel (com aba 'Clientes').")
-                uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"])
-                if uploaded_file:
-                    with open(PORTAL_EXCEL, "wb") as f:
-                        f.write(uploaded_file.getbuffer())
-                    st.success("Arquivo salvo!")
+        if senha == "vvv":
+            st.success("Acesso liberado! Faça o upload do arquivo Excel (com aba 'Clientes').")
+            uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_excel_uploader")
+            if uploaded_file:
+                with open(PORTAL_EXCEL, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                st.success("Arquivo salvo!")
 
-                    df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-                    df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-                    df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
-                    df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
+                df = pd.read_excel(uploaded_file, sheet_name="Clientes")
+                df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
+                df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
+                df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
+                df = df[df["OS"].notnull()]  # Só exibe OS não nulas
 
-                    # ---- FILTRO DE DATA ----
-                    datas_disponiveis = df["Data 1"].dropna().dt.strftime("%d/%m/%Y").unique()
-                    data_sel = st.selectbox("Filtrar por data", options=["Todas"] + list(datas_disponiveis), key="portal_data_filtro")
+                # FILTRO DE DATA
+                datas_disponiveis = df["Data 1"].dropna().dt.strftime("%d/%m/%Y").unique()
+                data_sel = st.selectbox("Filtrar por data", options=["Todas"] + list(datas_disponiveis), key="portal_data_filtro")
+                df_filt = df.copy()
+                if data_sel != "Todas":
+                    df_filt = df_filt[df_filt["Data 1"].dt.strftime("%d/%m/%Y") == data_sel]
 
-                    if data_sel and data_sel != "Todas":
-                        df = df[df["Data 1"].dt.strftime("%d/%m/%Y") == data_sel]
+                # Monta opções OS | Cliente | Bairro
+                opcoes = [
+                    (f'{int(row.OS)} | {row["Cliente"]} | {row["Bairro"]}', int(row.OS))
+                    for _, row in df_filt.iterrows() if not pd.isnull(row.OS)
+                ]
+                valores_opcoes = [v[1] for v in opcoes]
+                labels_opcoes = [v[0] for v in opcoes]
 
-                    # Monta as opções com múltiplas informações
-                    opcoes = [
-                        (f'{int(row.OS)} | {row["Cliente"]} | {row["Bairro"]}', int(row.OS))
-                        for _, row in df.iterrows() if not pd.isnull(row.OS)
-                    ]
-                    valores_opcoes = [v[1] for v in opcoes]
-                    labels_opcoes = [v[0] for v in opcoes]
+                selecionadas = st.multiselect(
+                    "Selecione os atendimentos para exibir (OS | Cliente | Bairro)",
+                    options=valores_opcoes,
+                    format_func=lambda os_id: labels_opcoes[valores_opcoes.index(os_id)] if os_id in valores_opcoes else str(os_id),
+                    key="portal_os_select"
+                )
 
-                    selecionadas = st.multiselect(
-                        "Selecione os atendimentos para exibir (OS | Cliente | Bairro)",
-                        options=valores_opcoes,
-                        format_func=lambda os_id: labels_opcoes[valores_opcoes.index(os_id)] if os_id in valores_opcoes else str(os_id)
-                    )
+                if st.button("Salvar atendimentos exibidos", key="btn_salvar_atends_portal"):
+                    with open(PORTAL_OS_LIST, "w") as f:
+                        json.dump(selecionadas, f)
+                    st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
+                    st.session_state.exibir_admin_portal = False
+                    st.rerun()
+        elif senha != "":
+            st.error("Senha incorreta!")
 
-                    if st.button("Salvar atendimentos exibidos"):
-                        with open(PORTAL_OS_LIST, "w") as f:
-                            json.dump(selecionadas, f)
-                        st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                        st.session_state.exibir_admin_portal = False
-                        st.rerun()
-            else:
-                st.error("Senha incorreta!")
-
-    # --- VISUALIZAÇÃO PÚBLICA ---
+    # VISUALIZAÇÃO PÚBLICA
     else:
         if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
             df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
