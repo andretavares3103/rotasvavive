@@ -795,33 +795,29 @@ with tabs[0]:
                 st.error("Senha incorreta!")
         st.stop()
 
-    uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
+        uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
-        with st.spinner("Processando... Isso pode levar alguns segundos."):
-            with tempfile.TemporaryDirectory() as tempdir:
-                temp_path = os.path.join(tempdir, uploaded_file.name)
-                with open(temp_path, "wb") as f:
-                    f.write(uploaded_file.read())
-                try:
-                    excel_path = pipeline(temp_path, tempdir)
-                    if os.path.exists(excel_path):
-                        st.success("Processamento finalizado com sucesso!")
-                        st.download_button(
-                            label="📥 Baixar Excel consolidado",
-                            data=open(excel_path, "rb").read(),
-                            file_name="rotas_bh_dados_tratados_completos.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key="download_excel_consolidado"
-                        )
-                        import shutil
-                        shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
-                        # >>> Salva o caminho e o DataFrame no session_state:
-                        st.session_state.rotas_file_path = "rotas_bh_dados_tratados_completos.xlsx"
-                        st.session_state.df_rotas = carregar_rotas(st.session_state.rotas_file_path)
-                    else:
-                        st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
-                except Exception as e:
-                    st.error(f"Erro no processamento: {e}")
+        # Grava arquivo em bytes para não depender de caminho no disco
+        file_bytes = uploaded_file.read()
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_path = os.path.join(tempdir, "input.xlsx")
+            with open(temp_path, "wb") as f:
+                f.write(file_bytes)
+            try:
+                excel_path = pipeline(temp_path, tempdir)  # Seu pipeline salva o Excel final nesse caminho
+                # Em vez de salvar caminho, carrega o DataFrame da aba Rotas
+                df_matriz_rotas = pd.read_excel(excel_path, sheet_name="Rotas")
+                st.session_state.df_matriz_rotas = df_matriz_rotas.copy()
+                st.success("Processamento finalizado com sucesso!")
+                # Botão de download se quiser
+                st.download_button(
+                    label="Baixar Excel consolidado",
+                    data=open(excel_path, "rb").read(),
+                    file_name="rotas_bh_dados_tratados_completos.xlsx"
+                )
+            except Exception as e:
+                st.error(f"Erro no processamento: {e}")
+
 
 
 # === ABA 1: MATRIZ DE ROTAS ===
@@ -955,105 +951,108 @@ with tabs[3]:
             Consulte abaixo os atendimentos disponíveis!
         </p>
         """, unsafe_allow_html=True)
-    
-    # Só lê se já existir arquivo carregado no session_state
-    if not st.session_state.rotas_file_path or not os.path.exists(st.session_state.rotas_file_path):
+
+    # 🔒 Apenas DataFrame em memória, nunca relendo arquivo!
+    if "df_matriz_rotas" not in st.session_state or st.session_state.df_matriz_rotas is None:
         st.info("Faça upload e processe o Excel para liberar o portal.")
     else:
-        # Usa o DataFrame carregado no session_state, sem reprocessar
-        df = st.session_state.df_rotas
-        df = df[df["Data 1"].notnull()]
-        df["Data 1"] = pd.to_datetime(df["Data 1"])
-        df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
-        dias_pt = {
-            "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
-            "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
-        }
-        df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
-        df = df[df["OS"].notnull()].copy()
-
-        # Exibe todos os cards por padrão se não houver filtro definido ainda
-        if "os_list" not in st.session_state:
-            st.session_state.os_list = []
-
-        # --- BLOCO ADMIN ---
-        st.markdown("---")
-        st.markdown("**Área Administrativa - Selecione atendimentos visíveis (admin)**")
-        senha_admin = st.text_input("Senha Admin:", type="password", key="senha_admin_portal")
-        if st.button("Liberar seleção de atendimentos", key="btn_portal"):
-            if senha_admin == "vvv":
-                st.session_state.exibir_admin_portal = True
-            else:
-                st.warning("Senha incorreta!")
-        if st.session_state.get("exibir_admin_portal", False):
-            os_opcoes = [
-                f'{row["Nome Cliente"]} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Plano"]}'
-                for idx, row in df.iterrows()
-            ]
-            os_ids = list(df["OS"])
-            os_selecionadas = st.multiselect(
-                "Selecione os atendimentos para exibir",
-                options=os_ids,
-                format_func=lambda x: os_opcoes[os_ids.index(x)],
-                default=st.session_state.os_list
-            )
-            if st.button("Salvar lista de OS exibidas", key="salvar_portal"):
-                st.session_state.os_list = os_selecionadas
-                st.success("Seleção salva!")
-
-        # ---- FIM BLOCO ADMIN ----
-
-        # Só mostra cards das OS selecionadas
-        df_visiveis = df[df["OS"].isin(st.session_state.os_list)].copy()
-        if df_visiveis.empty:
-            st.info("Nenhum atendimento disponível para exibição.")
+        # Use sempre o DataFrame do session_state!
+        df = st.session_state.df_matriz_rotas.copy()
+        if df.empty:
+            st.info("Nenhum atendimento disponível no momento.")
         else:
-            st.markdown("<h5>Atendimentos disponíveis:</h5>", unsafe_allow_html=True)
-            for _, row in df_visiveis.iterrows():
-                servico = row.get("Serviço", "")
-                bairro = row.get("Bairro", "")
-                data = row.get("Data 1 Formatada", "")
-                dia_semana = row.get("Dia da Semana", "")
-                horas_servico = row.get("Horas de serviço", "")
-                hora_entrada = row.get("Hora de entrada", "")
-                referencia = row.get("Ponto de Referencia", "")
-                nome_cliente = row.get("Nome Cliente", "")
-                mensagem = (
-                    f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
-                    f"dia {dia_semana}, {data}. Horário de entrada: {hora_entrada}"
+            df = df[df["Data 1"].notnull()]
+            df["Data 1"] = pd.to_datetime(df["Data 1"])
+            df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
+            dias_pt = {
+                "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
+                "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
+            }
+            df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
+            df = df[df["OS"].notnull()].copy()
+
+            # Exibe todos os cards por padrão se não houver filtro definido ainda
+            if "os_list" not in st.session_state:
+                st.session_state.os_list = []
+
+            # --- BLOCO ADMIN ---
+            st.markdown("---")
+            st.markdown("**Área Administrativa - Selecione atendimentos visíveis (admin)**")
+            senha_admin = st.text_input("Senha Admin:", type="password", key="senha_admin_portal")
+            if st.button("Liberar seleção de atendimentos", key="btn_portal"):
+                if senha_admin == "vvv":
+                    st.session_state.exibir_admin_portal = True
+                else:
+                    st.warning("Senha incorreta!")
+            if st.session_state.get("exibir_admin_portal", False):
+                os_opcoes = [
+                    f'{row["Nome Cliente"]} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Plano"]}'
+                    for idx, row in df.iterrows()
+                ]
+                os_ids = list(df["OS"])
+                os_selecionadas = st.multiselect(
+                    "Selecione os atendimentos para exibir",
+                    options=os_ids,
+                    format_func=lambda x: os_opcoes[os_ids.index(x)],
+                    default=st.session_state.os_list
                 )
-                mensagem_url = urllib.parse.quote(mensagem)
-                celular = "31995265364"
-                whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
-                st.markdown(f"""
-                <div style="
-                    background: #fff;
-                    border: 1.5px solid #eee;
-                    border-radius: 18px;
-                    padding: 18px 18px 12px 18px;
-                    margin-bottom: 14px;
-                    min-width: 260px;
-                    max-width: 440px;
-                    color: #00008B;
-                    font-family: Arial, sans-serif;
-                ">
-                    <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
-                        {servico}
+                if st.button("Salvar lista de OS exibidas", key="salvar_portal"):
+                    st.session_state.os_list = os_selecionadas
+                    st.success("Seleção salva!")
+
+            # ---- FIM BLOCO ADMIN ----
+
+            # Só mostra cards das OS selecionadas
+            df_visiveis = df[df["OS"].isin(st.session_state.os_list)].copy()
+            if df_visiveis.empty:
+                st.info("Nenhum atendimento disponível para exibição.")
+            else:
+                st.markdown("<h5>Atendimentos disponíveis:</h5>", unsafe_allow_html=True)
+                for _, row in df_visiveis.iterrows():
+                    servico = row.get("Serviço", "")
+                    bairro = row.get("Bairro", "")
+                    data = row.get("Data 1 Formatada", "")
+                    dia_semana = row.get("Dia da Semana", "")
+                    horas_servico = row.get("Horas de serviço", "")
+                    hora_entrada = row.get("Hora de entrada", "")
+                    referencia = row.get("Ponto de Referencia", "")
+                    nome_cliente = row.get("Nome Cliente", "")
+                    mensagem = (
+                        f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
+                        f"dia {dia_semana}, {data}. Horário de entrada: {hora_entrada}"
+                    )
+                    mensagem_url = urllib.parse.quote(mensagem)
+                    celular = "31995265364"
+                    whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
+                    st.markdown(f"""
+                    <div style="
+                        background: #fff;
+                        border: 1.5px solid #eee;
+                        border-radius: 18px;
+                        padding: 18px 18px 12px 18px;
+                        margin-bottom: 14px;
+                        min-width: 260px;
+                        max-width: 440px;
+                        color: #00008B;
+                        font-family: Arial, sans-serif;
+                    ">
+                        <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
+                            {servico}
+                        </div>
+                        <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
+                            <b style="color:#00008B;">Cliente:</b> <span>{nome_cliente}</span>
+                            <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
+                        </div>
+                        <div style="font-size:0.95em; color:#00008B;">
+                            <b>Data:</b> <span>{data} ({dia_semana})</span><br>
+                            <b>Duração:</b> <span>{horas_servico}</span><br>
+                            <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
+                            <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
+                        </div>
+                        <a href="{whatsapp_url}" target="_blank">
+                            <button style="margin-top:12px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.02em; font-weight:700;cursor:pointer; width:100%;">
+                                Aceitar Atendimento no WhatsApp
+                            </button>
+                        </a>
                     </div>
-                    <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
-                        <b style="color:#00008B;">Cliente:</b> <span>{nome_cliente}</span>
-                        <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
-                    </div>
-                    <div style="font-size:0.95em; color:#00008B;">
-                        <b>Data:</b> <span>{data} ({dia_semana})</span><br>
-                        <b>Duração:</b> <span>{horas_servico}</span><br>
-                        <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
-                        <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
-                    </div>
-                    <a href="{whatsapp_url}" target="_blank">
-                        <button style="margin-top:12px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.02em; font-weight:700;cursor:pointer; width:100%;">
-                            Aceitar Atendimento no WhatsApp
-                        </button>
-                    </a>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
