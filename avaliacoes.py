@@ -956,6 +956,8 @@ with tabs[3]:
         df = carregar_clientes(ROTAS_FILE)
         df = df[df["ID Cliente"].notnull()]
         df = df.copy()
+    if "os_list" not in st.session_state:
+        st.session_state.os_list = []
         if "Data 1" in df.columns:
             df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
             df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
@@ -972,7 +974,7 @@ with tabs[3]:
         if "exibir_admin" not in st.session_state:
             st.session_state.exibir_admin = False
         if "os_list" not in st.session_state:
-            st.session_state.os_list = list(df["ID Cliente"])
+            st.session_state.os_list = []  # <- Começa vazio!
 
         # Campo de senha e botão de desbloqueio
         senha = st.text_input("Área Administrativa - digite a senha para selecionar OS", type="password", value="")
@@ -993,7 +995,7 @@ with tabs[3]:
                 "Selecione os clientes/atendimentos para exibir",
                 options=os_ids,
                 format_func=lambda x: os_opcoes[os_ids.index(x)],
-                default=[]
+                default=st.session_state.os_list
             )
             if st.button("Salvar lista de OS exibidas"):
                 st.session_state.os_list = os_selecionadas
