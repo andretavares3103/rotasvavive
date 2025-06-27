@@ -962,7 +962,7 @@ with tabs[3]:
             "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
         }
         df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
-        df = df[df["ID Cliente"].notnull()]
+        df = df[df["OS"].notnull()]
         df = df.copy()
         if "os_list" not in st.session_state:
             st.session_state.os_list = []
@@ -1018,7 +1018,7 @@ with tabs[3]:
         
 
         # Exibe sempre os cards das OS permitidas
-        df_visiveis = df[df["ID Cliente"].isin(st.session_state.os_list)].copy()
+        df_visiveis = df[df["OS"].isin(st.session_state.os_list)].copy()
         if df_visiveis.empty:
             st.info("Nenhum atendimento disponível para exibição.")
         else:
