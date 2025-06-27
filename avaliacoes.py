@@ -987,7 +987,8 @@ with tabs[3]:
             if senha_tab3 == "vvv":
                 st.session_state.autenticado_tab3 = True
                 st.success("Acesso liberado! Faça o upload do arquivo Excel (com aba 'Clientes').")
-                st.experimental_rerun()
+                st.rerun()
+
             else:
                 st.error("Senha incorreta!")
         st.stop()
