@@ -940,18 +940,6 @@ with tabs[2]:
     else:
         st.info("Nenhum aceite registrado ainda.")
 
-def formatar_hora(h):
-    try:
-        if pd.isnull(h) or h == "":
-            return ""
-        h_str = str(h).strip()
-        if ":" in h_str and len(h_str) == 8:
-            return h_str[:5]
-        if ":" in h_str and len(h_str) == 5:
-            return h_str
-        return pd.to_datetime(h_str).strftime("%H:%M")
-    except:
-        return str(h)
 
 def formatar_hora(h):
     try:
