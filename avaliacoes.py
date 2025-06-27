@@ -949,6 +949,23 @@ def formatar_hora(h):
     except:
         return str(h)
 
+import pandas as pd
+import urllib.parse
+import streamlit as st
+
+def formatar_hora(h):
+    try:
+        if pd.isnull(h) or h == "":
+            return ""
+        h_str = str(h).strip()
+        if ":" in h_str and len(h_str) == 8:
+            return h_str[:5]
+        if ":" in h_str and len(h_str) == 5:
+            return h_str
+        return pd.to_datetime(h_str).strftime("%H:%M")
+    except:
+        return str(h)
+
 with tabs[3]:
     st.markdown("""
     <div style='display:flex;align-items:center;gap:16px'>
@@ -960,12 +977,38 @@ with tabs[3]:
     </p>
     """, unsafe_allow_html=True)
 
-    # 1. Checar se DataFrame da aba Clientes já está no session_state
-    if "df_clientes" not in st.session_state or st.session_state.df_clientes is None:
-        st.info("Faça upload do Excel (com aba 'Clientes') na aba Upload para liberar o portal.")
+    # Controle de senha e upload exclusivos para Tab3
+    if "autenticado_tab3" not in st.session_state:
+        st.session_state.autenticado_tab3 = False
+    if "df_clientes_tab3" not in st.session_state:
+        st.session_state.df_clientes_tab3 = None
+    if "os_visiveis_tab3" not in st.session_state:
+        st.session_state.os_visiveis_tab3 = []
+
+    if not st.session_state.autenticado_tab3:
+        senha_tab3 = st.text_input("Digite a senha de administrador para o Portal de Atendimentos:", type="password", key="senha_tab3")
+        if st.button("Liberar upload e seleção", key="btn_senha_tab3"):
+            if senha_tab3 == "vvv":
+                st.session_state.autenticado_tab3 = True
+                st.success("Acesso liberado! Faça o upload do arquivo Excel (com aba 'Clientes').")
+                st.experimental_rerun()
+            else:
+                st.error("Senha incorreta!")
         st.stop()
-    else:
-        df = st.session_state.df_clientes.copy()
+
+    # Upload exclusivo da Tab3 (só aparece após senha correta)
+    uploaded_file_tab3 = st.file_uploader("Faça upload do arquivo Excel (aba 'Clientes')", type=["xlsx"], key="upload_tab3")
+    if uploaded_file_tab3 is not None:
+        try:
+            df = pd.read_excel(uploaded_file_tab3, sheet_name="Clientes")
+            st.session_state.df_clientes_tab3 = df.copy()
+            st.success("Arquivo carregado com sucesso!")
+        except Exception as e:
+            st.error(f"Erro ao ler o arquivo: {e}")
+            st.stop()
+
+    if st.session_state.df_clientes_tab3 is not None:
+        df = st.session_state.df_clientes_tab3.copy()
         if df.empty:
             st.info("Nenhum atendimento disponível no momento.")
             st.stop()
@@ -983,30 +1026,12 @@ with tabs[3]:
         df = df[df["OS"].notnull()]
         df = df.sort_values("Data 1")
 
-        # Senha admin
-        if "admin_liberado_tab3" not in st.session_state:
-            st.session_state.admin_liberado_tab3 = False
-
-        if not st.session_state.admin_liberado_tab3:
-            senha_admin = st.text_input("Digite a senha de administrador", type="password", key="senha_admin_tab3")
-            if st.button("Liberar seleção", key="btn_senha_tab3"):
-                if senha_admin == "vvv":
-                    st.session_state.admin_liberado_tab3 = True
-                    st.success("Acesso liberado!")
-                    st.experimental_rerun()
-                else:
-                    st.error("Senha incorreta!")
-            st.stop()
-
-        # Lista de OS disponíveis para selecionar
+        # Seleção das OS (atendimentos)
         opcoes = [
             f'OS {row.OS} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Bairro"]} | {row["Cliente"]}'
             for _, row in df.iterrows()
         ]
         os_ids = list(df["OS"].astype(int))
-        # Seleção múltipla
-        if "os_visiveis_tab3" not in st.session_state:
-            st.session_state.os_visiveis_tab3 = []
 
         os_selecionadas = st.multiselect(
             "Selecione os atendimentos para exibir (OS | Data | Serviço | Bairro | Cliente)",
@@ -1061,15 +1086,3 @@ with tabs[3]:
                         <b style="color:#00008B;">Bairro:</b> <span style="color:#00008B;">{bairro}</span>
                     </div>
                     <div style="font-size:1em; color:#00008B;">
-                        <b style="color:#00008B;">Data:</b> <span style="color:#00008B;">{data} ({dia_semana})</span><br>
-                        <b style="color:#00008B;">Duração do atendimento:</b> <span style="color:#00008B;">{horas_servico}</span><br>
-                        <b style="color:#00008B;">Hora de entrada:</b> <span style="color:#00008B;">{hora_entrada}</span><br>
-                        <b style="color:#00008B;">Ponto de Referência:</b> <span style="color:#00008B;">{referencia if referencia and referencia != 'nan' else '-'}</span>
-                    </div>
-                    <a href="{whatsapp_url}" target="_blank">
-                        <button style="margin-top:18px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.07em; font-weight:700;cursor:pointer; width:100%;">
-                            Aceitar Atendimento no WhatsApp
-                        </button>
-                    </a>
-                </div>
-                """, unsafe_allow_html=True)
