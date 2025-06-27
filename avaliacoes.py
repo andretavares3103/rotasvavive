@@ -958,8 +958,9 @@ with tabs[3]:
         df = df[df["OS"].notnull()].copy()
         
         # Exibe todos os cards por padrão se não houver filtro definido ainda
-        if "os_list" not in st.session_state or not st.session_state.os_list:
-            st.session_state.os_list = list(df["OS"])
+        if "os_list" not in st.session_state:
+            st.session_state.os_list = []
+
 
         # === BLOCO DE SELEÇÃO DE ATENDIMENTOS (SÓ ADMIN) ===
         st.markdown("---")
