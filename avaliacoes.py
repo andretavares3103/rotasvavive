@@ -971,7 +971,7 @@ with tabs[3]:
         </p>
         """, unsafe_allow_html=True)
 
-    # ----- Botão para liberar o modo admin -----
+    # Flags de sessão para liberar admin e autenticação
     if "exibir_admin_portal" not in st.session_state:
         st.session_state.exibir_admin_portal = False
     if "admin_autenticado_portal" not in st.session_state:
@@ -999,8 +999,35 @@ with tabs[3]:
                     f.write(uploaded_file.getbuffer())
                 st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
                 df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-                opcoes = [int(row.OS) for _, row in df.iterrows() if not pd.isnull(row.OS)]
-                selecionadas = st.multiselect("Selecione as OS para exibir no portal", opcoes, key="os_multiselect")
+
+                # 1️⃣ FILTRO DE DATA
+                df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
+                datas_unicas = df["Data 1"].dropna().dt.date.unique()
+                data_filtro = st.selectbox(
+                    "Filtrar por data do atendimento", 
+                    options=["Todas"] + [str(d) for d in sorted(datas_unicas)]
+                )
+
+                # Filtra o DataFrame pela data selecionada
+                df_filtrada = df.copy()
+                if data_filtro != "Todas":
+                    df_filtrada = df[df["Data 1"].dt.date.astype(str) == data_filtro]
+
+                # 2️⃣ Opções formatadas: OS | Cliente | Bairro
+                opcoes = [
+                    (int(row.OS), f'OS {int(row.OS)} | {row.Cliente} | {row.Bairro}')
+                    for _, row in df_filtrada.iterrows() if not pd.isnull(row.OS)
+                ]
+                opcoes_ids = [o[0] for o in opcoes]
+                opcoes_labels = [o[1] for o in opcoes]
+
+                # 3️⃣ Multiselect com format_func
+                selecionadas = st.multiselect(
+                    "Selecione os atendimentos (OS | Cliente | Bairro) para exibir no portal",
+                    options=opcoes_ids,
+                    format_func=lambda x: opcoes_labels[opcoes_ids.index(x)] if x in opcoes_ids else str(x),
+                    key="os_multiselect"
+                )
                 if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
                     with open(PORTAL_OS_LIST, "w") as f:
                         json.dump(selecionadas, f)
@@ -1016,7 +1043,7 @@ with tabs[3]:
             df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
             with open(PORTAL_OS_LIST, "r") as f:
                 os_list = json.load(f)
-            df = df[df["OS"].astype(str).isin([str(x) for x in os_list])]
+            df = df[df["OS"].astype(int).isin([int(x) for x in os_list])]
             if df.empty:
                 st.info("Nenhum atendimento disponível.")
             else:
