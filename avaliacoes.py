@@ -5,18 +5,9 @@ import numpy as np
 import os
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
-import tempfile
 import io
-import streamlit as st
-import pandas as pd
 import tempfile
-import os
 
-# Adicione estes controles globais ANTES do bloco das abas
-if "rotas_file_path" not in st.session_state:
-    st.session_state.rotas_file_path = None
-if "df_rotas" not in st.session_state:
-    st.session_state.df_rotas = None
 
 
 st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
@@ -778,12 +769,15 @@ def pipeline(file_path, output_dir):
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
-tabs = st.tabs([
-    "Upload de Arquivo", 
-    "Matriz de Rotas", 
-    "Aceites", 
-    "Portal de Atendimentos"
-])
+
+# Adicione estes controles globais ANTES do bloco das abas
+if "rotas_file_path" not in st.session_state:
+    st.session_state.rotas_file_path = None
+if "df_rotas" not in st.session_state:
+    st.session_state.df_rotas = None
+
+
+
 
 # === ABA 0: UPLOAD DE ARQUIVO ===
 tabs = st.tabs([
