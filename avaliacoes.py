@@ -943,10 +943,11 @@ with tabs[3]:
             Consulte abaixo os atendimentos disponíveis!
         </p>
         """, unsafe_allow_html=True)
-    # APENAS CARREGA O ARQUIVO DE ROTAS JÁ EXISTENTE!
+    # Só lê se já existir arquivo de rotas pronto
     if not os.path.exists(ROTAS_FILE):
         st.info("Faça upload e processe o Excel para liberar o portal.")
     else:
+        # Aqui só CARREGA, não processa de novo
         df = carregar_rotas(ROTAS_FILE)
         df = df[df["Data 1"].notnull()]
         df["Data 1"] = pd.to_datetime(df["Data 1"])
@@ -957,12 +958,12 @@ with tabs[3]:
         }
         df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
         df = df[df["OS"].notnull()].copy()
-        
-        # Por padrão, NENHUM atendimento é exibido até o admin selecionar
+
+        # Exibe todos os cards por padrão se não houver filtro definido ainda
         if "os_list" not in st.session_state:
             st.session_state.os_list = []
 
-        # === BLOCO ADMIN: Libera seleção só se quiser liberar ===
+        # --- BLOCO ADMIN ---
         st.markdown("---")
         st.markdown("**Área Administrativa - Selecione atendimentos visíveis (admin)**")
         senha_admin = st.text_input("Senha Admin:", type="password", key="senha_admin_portal")
@@ -981,14 +982,15 @@ with tabs[3]:
                 "Selecione os atendimentos para exibir",
                 options=os_ids,
                 format_func=lambda x: os_opcoes[os_ids.index(x)],
-                default=st.session_state.os_list  # vazio por padrão!
+                default=st.session_state.os_list
             )
             if st.button("Salvar lista de OS exibidas", key="salvar_portal"):
                 st.session_state.os_list = os_selecionadas
                 st.success("Seleção salva!")
-        # FIM BLOCO ADMIN
 
-        # EXIBIÇÃO PARA TODOS
+        # ---- FIM BLOCO ADMIN ----
+
+        # Só mostra cards das OS selecionadas
         df_visiveis = df[df["OS"].isin(st.session_state.os_list)].copy()
         if df_visiveis.empty:
             st.info("Nenhum atendimento disponível para exibição.")
