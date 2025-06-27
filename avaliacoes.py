@@ -1033,7 +1033,7 @@ with tabs[3]:
                     st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
                     st.session_state.exibir_admin_portal = False
                     st.session_state.admin_autenticado_portal = False
-                    st.experimental_rerun()
+                    st.rerun()
     # -------------- FIM BLOCO ADMIN ------------------
 
     # -------------- BLOCO PÚBLICO: EXIBE SEMPRE --------------
