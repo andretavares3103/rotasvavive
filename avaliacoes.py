@@ -943,6 +943,9 @@ with tabs[2]:
 
 import json
 import os
+import pandas as pd
+import streamlit as st
+import urllib
 
 PORTAL_EXCEL = "portal_clientes.xlsx"
 PORTAL_OS_LIST = "portal_os_list.json"
@@ -971,7 +974,7 @@ with tabs[3]:
         </p>
         """, unsafe_allow_html=True)
 
-    # Flags de sessão para liberar admin e autenticação
+    # ------------------ BLOCO ADMIN ------------------
     if "exibir_admin_portal" not in st.session_state:
         st.session_state.exibir_admin_portal = False
     if "admin_autenticado_portal" not in st.session_state:
@@ -980,7 +983,7 @@ with tabs[3]:
     if st.button("Acesso admin para editar atendimentos do portal"):
         st.session_state.exibir_admin_portal = True
 
-    # ----- BLOCO ADMIN: Só aparece se admin liberar -----
+    # Só aparece admin se for acionado
     if st.session_state.exibir_admin_portal:
         if not st.session_state.admin_autenticado_portal:
             senha = st.text_input("Digite a senha de admin:", type="password", key="senha_portal_admin")
@@ -991,7 +994,6 @@ with tabs[3]:
                 else:
                     st.error("Senha incorreta!")
 
-        # Só exibe upload e seleção SE autenticado:
         if st.session_state.admin_autenticado_portal:
             uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
             if uploaded_file:
@@ -1000,20 +1002,18 @@ with tabs[3]:
                 st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
                 df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
 
-                # 1️⃣ FILTRO DE DATA
+                # FILTRO DE DATA
                 df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
                 datas_unicas = df["Data 1"].dropna().dt.date.unique()
                 data_filtro = st.selectbox(
                     "Filtrar por data do atendimento", 
                     options=["Todas"] + [str(d) for d in sorted(datas_unicas)]
                 )
-
-                # Filtra o DataFrame pela data selecionada
                 df_filtrada = df.copy()
                 if data_filtro != "Todas":
                     df_filtrada = df[df["Data 1"].dt.date.astype(str) == data_filtro]
 
-                # 2️⃣ Opções formatadas: OS | Cliente | Bairro
+                # Opções formatadas: OS | Cliente | Bairro
                 opcoes = [
                     (int(row.OS), f'OS {int(row.OS)} | {row.Cliente} | {row.Bairro}')
                     for _, row in df_filtrada.iterrows() if not pd.isnull(row.OS)
@@ -1021,7 +1021,6 @@ with tabs[3]:
                 opcoes_ids = [o[0] for o in opcoes]
                 opcoes_labels = [o[1] for o in opcoes]
 
-                # 3️⃣ Multiselect com format_func
                 selecionadas = st.multiselect(
                     "Selecione os atendimentos (OS | Cliente | Bairro) para exibir no portal",
                     options=opcoes_ids,
@@ -1032,68 +1031,65 @@ with tabs[3]:
                     with open(PORTAL_OS_LIST, "w") as f:
                         json.dump(selecionadas, f)
                     st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                    # Limpa flags de admin (volta modo público)
                     st.session_state.exibir_admin_portal = False
                     st.session_state.admin_autenticado_portal = False
-                    st.rerun()
+                    st.experimental_rerun()
+    # -------------- FIM BLOCO ADMIN ------------------
 
-
-
-    # ----- BLOCO VISUALIZAÇÃO: TODOS USUÁRIOS -----
-    if not st.session_state.exibir_admin_portal:
-        if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-            with open(PORTAL_OS_LIST, "r") as f:
-                os_list = json.load(f)
-            df = df[df["OS"].astype(int).isin([int(x) for x in os_list])]
-            if df.empty:
-                st.info("Nenhum atendimento disponível.")
-            else:
-                st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
-                for _, row in df.iterrows():
-                    servico = row.get("Serviço", "")
-                    bairro = row.get("Bairro", "")
-                    data = row.get("Data 1", "")
-                    hora_entrada = row.get("Hora de entrada", "")
-                    nome_cliente = row.get("Cliente", "")
-                    referencia = row.get("Ponto de Referencia", "")
-                    mensagem = (
-                        f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
-                        f"para o dia {data}. Horário de entrada: {hora_entrada}"
-                    )
-                    mensagem_url = urllib.parse.quote(mensagem)
-                    celular = "31995265364"
-                    whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
-                    st.markdown(f"""
-                        <div style="
-                            background: #fff;
-                            border: 1.5px solid #eee;
-                            border-radius: 18px;
-                            padding: 18px 18px 12px 18px;
-                            margin-bottom: 14px;
-                            min-width: 260px;
-                            max-width: 440px;
-                            color: #00008B;
-                            font-family: Arial, sans-serif;
-                        ">
-                            <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
-                                {servico}
-                            </div>
-                            <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
-                                <b style="color:#00008B;">Cliente:</b> <span>{nome_cliente}</span>
-                                <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
-                            </div>
-                            <div style="font-size:0.95em; color:#00008B;">
-                                <b>Data:</b> <span>{data}</span><br>
-                                <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
-                                <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
-                            </div>
-                            <a href="{whatsapp_url}" target="_blank">
-                                <button style="margin-top:12px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.02em; font-weight:700;cursor:pointer; width:100%;">
-                                    Aceitar Atendimento no WhatsApp
-                                </button>
-                            </a>
-                        </div>
-                    """, unsafe_allow_html=True)
+    # -------------- BLOCO PÚBLICO: EXIBE SEMPRE --------------
+    if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
+        df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+        with open(PORTAL_OS_LIST, "r") as f:
+            os_list = json.load(f)
+        df = df[df["OS"].astype(int).isin([int(x) for x in os_list])]
+        if df.empty:
+            st.info("Nenhum atendimento disponível.")
         else:
-            st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
+            st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
+            for _, row in df.iterrows():
+                servico = row.get("Serviço", "")
+                bairro = row.get("Bairro", "")
+                data = row.get("Data 1", "")
+                hora_entrada = row.get("Hora de entrada", "")
+                nome_cliente = row.get("Cliente", "")
+                referencia = row.get("Ponto de Referencia", "")
+                mensagem = (
+                    f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
+                    f"para o dia {data}. Horário de entrada: {hora_entrada}"
+                )
+                mensagem_url = urllib.parse.quote(mensagem)
+                celular = "31995265364"
+                whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
+                st.markdown(f"""
+                    <div style="
+                        background: #fff;
+                        border: 1.5px solid #eee;
+                        border-radius: 18px;
+                        padding: 18px 18px 12px 18px;
+                        margin-bottom: 14px;
+                        min-width: 260px;
+                        max-width: 440px;
+                        color: #00008B;
+                        font-family: Arial, sans-serif;
+                    ">
+                        <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
+                            {servico}
+                        </div>
+                        <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
+                            <b style="color:#00008B;">Cliente:</b> <span>{nome_cliente}</span>
+                            <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
+                        </div>
+                        <div style="font-size:0.95em; color:#00008B;">
+                            <b>Data:</b> <span>{data}</span><br>
+                            <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
+                            <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
+                        </div>
+                        <a href="{whatsapp_url}" target="_blank">
+                            <button style="margin-top:12px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.02em; font-weight:700;cursor:pointer; width:100%;">
+                                Aceitar Atendimento no WhatsApp
+                            </button>
+                        </a>
+                    </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
