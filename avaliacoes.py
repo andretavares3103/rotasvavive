@@ -9,6 +9,25 @@ import io
 
 st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
 
+# BLOCO DE AUTENTICAÇÃO POR SENHA
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+
+if not st.session_state["autenticado"]:
+    st.markdown("### Área Restrita: Digite a senha para acessar as abas")
+    senha = st.text_input("Senha:", type="password")
+    if st.button("Entrar"):
+        if senha == "SUA_SENHA_AQUI":
+            st.session_state["autenticado"] = True
+            st.experimental_rerun()
+        else:
+            st.error("Senha incorreta!")
+    st.stop()
+#-----------------------------------------------------------------------
+
+
+
+
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
 
