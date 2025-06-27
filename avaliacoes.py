@@ -947,7 +947,6 @@ with tabs[2]:
     else:
         st.info("Nenhum aceite registrado ainda.")
 
-# === ABA 3: PORTAL DE ATENDIMENTOS (sem senha para visualizar, senha só para admin liberar atendimentos) ===
 with tabs[3]:
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
@@ -970,10 +969,12 @@ with tabs[3]:
             "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
         }
         df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
-        df = df[df["OS"].notnull()]
-        df = df.copy()
-        if "os_list" not in st.session_state:
-            st.session_state.os_list = []
+        df = df[df["OS"].notnull()].copy()
+        
+        # Exibe todos os cards por padrão se não houver filtro definido ainda
+        if "os_list" not in st.session_state or not st.session_state.os_list:
+            st.session_state.os_list = list(df["OS"])
+
         # === BLOCO DE SELEÇÃO DE ATENDIMENTOS (SÓ ADMIN) ===
         st.markdown("---")
         st.markdown("**Área Administrativa - Selecione atendimentos visíveis (admin)**")
