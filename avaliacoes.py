@@ -32,6 +32,21 @@ if not st.session_state["autenticado"]:
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
 
+
+
+@st.cache_data
+def carregar_rotas(path):
+    return pd.read_excel(path, sheet_name="Rotas")
+
+@st.cache_data
+def carregar_clientes(path):
+    return pd.read_excel(path, sheet_name="Clientes")
+
+@st.cache_data
+def carregar_aceites(path):
+    return pd.read_excel(path)
+
+
 def exibe_formulario_aceite(os_id):
     st.header(f"Validação de Aceite (OS {os_id})")
     profissional = st.text_input("Nome da Profissional")
@@ -797,7 +812,8 @@ with tabs[0]:
 
 with tabs[1]:
     if os.path.exists(ROTAS_FILE):
-        df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
+        df_rotas = carregar_rotas(ROTAS_FILE)
+
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_rotas")
         clientes = df_rotas["Nome Cliente"].dropna().unique()
@@ -832,8 +848,9 @@ with tabs[2]:
         import io
         from datetime import datetime
 
-        df_aceites = pd.read_excel(ACEITES_FILE)
-        df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
+        df_aceites = carregar_aceites(ACEITES_FILE)
+        df_rotas = carregar_rotas(ROTAS_FILE)
+        
         df_aceites_completo = pd.merge(
             df_aceites, df_rotas[
                 ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
@@ -907,7 +924,7 @@ with tabs[2]:
         )
     elif os.path.exists(ACEITES_FILE):
         import io
-        df_aceites = pd.read_excel(ACEITES_FILE)
+        df_aceites = carregar_aceites(ACEITES_FILE)
         st.dataframe(df_aceites)
         output = io.BytesIO()
         df_aceites.to_excel(output, index=False)
@@ -936,7 +953,7 @@ with tabs[3]:
         st.info("Faça upload e processe o Excel para liberar o portal.")
     else:
         # 1️⃣ Lê a aba Clientes do arquivo existente (já carregado no app)
-        df = pd.read_excel(ROTAS_FILE, sheet_name="Clientes")
+        df = carregar_clientes(ROTAS_FILE)
         df = df[df["ID Cliente"].notnull()]
         df = df.copy()
         if "Data 1" in df.columns:
