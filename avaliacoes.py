@@ -976,7 +976,7 @@ with tabs[3]:
                 "Selecione os clientes/atendimentos para exibir",
                 options=os_ids,
                 format_func=lambda x: os_opcoes[os_ids.index(x)],
-                default=st.session_state.os_list
+                default=[]
             )
             if st.button("Salvar lista de OS exibidas"):
                 st.session_state.os_list = os_selecionadas
