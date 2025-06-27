@@ -941,14 +941,6 @@ with tabs[2]:
         st.info("Nenhum aceite registrado ainda.")
 
 
-import json
-import os
-import pandas as pd
-import urllib
-
-PORTAL_EXCEL = "portal_clientes.xlsx"
-PORTAL_OS_LIST = "portal_os_list.json"
-
 def formatar_hora(h):
     try:
         if pd.isnull(h) or h == "":
@@ -963,6 +955,12 @@ def formatar_hora(h):
         return str(h)
 
 with tabs[3]:
+    import json
+    import os
+
+    PORTAL_EXCEL = "portal_clientes.xlsx"
+    PORTAL_OS_LIST = "portal_os_list.json"
+
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
             <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
@@ -973,69 +971,77 @@ with tabs[3]:
         </p>
         """, unsafe_allow_html=True)
 
+    # Botão para liberar o modo admin
     if "exibir_admin_portal" not in st.session_state:
         st.session_state.exibir_admin_portal = False
 
-    # Botão para mostrar campos admin
     if st.button("Acesso admin para editar atendimentos do portal"):
         st.session_state.exibir_admin_portal = True
         st.rerun()
 
-    # Bloco ADMIN: upload, filtro, seleção
+    # ----- BLOCO ADMIN -----
     if st.session_state.exibir_admin_portal:
         senha = st.text_input("Digite a senha de admin:", type="password", key="senha_portal_admin")
-        if senha == "vvv":
-            st.success("Acesso liberado! Faça o upload do arquivo Excel (com aba 'Clientes').")
-            uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_excel_uploader")
-            if uploaded_file:
-                with open(PORTAL_EXCEL, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.success("Arquivo salvo!")
+        liberar = st.button("Liberar upload e seleção")
+        if liberar:
+            if senha == "vvv":
+                st.success("Acesso liberado! Faça o upload do arquivo Excel (com aba 'Clientes').")
+                uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"])
+                if uploaded_file:
+                    with open(PORTAL_EXCEL, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    st.success("Arquivo salvo! Agora selecione os atendimentos.")
 
-                df = pd.read_excel(uploaded_file, sheet_name="Clientes")
-                df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-                df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
-                df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
-                df = df[df["OS"].notnull()]  # Só exibe OS não nulas
+                    # Leitura dos dados
+                    df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+                    df = df[df["OS"].notnull()].copy()
+                    df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
+                    df = df.sort_values("Data 1")
 
-                # FILTRO DE DATA
-                datas_disponiveis = df["Data 1"].dropna().dt.strftime("%d/%m/%Y").unique()
-                data_sel = st.selectbox("Filtrar por data", options=["Todas"] + list(datas_disponiveis), key="portal_data_filtro")
-                df_filt = df.copy()
-                if data_sel != "Todas":
-                    df_filt = df_filt[df_filt["Data 1"].dt.strftime("%d/%m/%Y") == data_sel]
+                    # FILTRO DE DATA para seleção
+                    datas = df["Data 1"].dt.strftime("%d/%m/%Y").unique()
+                    data_filtro = st.selectbox("Filtrar data para facilitar seleção", options=["Todas"] + list(datas), key="filtro_data_admin")
+                    if data_filtro != "Todas":
+                        df = df[df["Data 1"].dt.strftime("%d/%m/%Y") == data_filtro]
 
-                # Monta opções OS | Cliente | Bairro
-                opcoes = [
-                    (f'{int(row.OS)} | {row["Cliente"]} | {row["Bairro"]}', int(row.OS))
-                    for _, row in df_filt.iterrows() if not pd.isnull(row.OS)
-                ]
-                valores_opcoes = [v[1] for v in opcoes]
-                labels_opcoes = [v[0] for v in opcoes]
+                    # Opções de seleção: OS | Cliente | Bairro
+                    def label_opcao(row):
+                        return f'OS {row.OS} | {row.Cliente} | {row.Bairro}'
+                    opcoes = [row.OS for _, row in df.iterrows()]
+                    labels = [label_opcao(row) for _, row in df.iterrows()]
 
-                selecionadas = st.multiselect(
-                    "Selecione os atendimentos para exibir (OS | Cliente | Bairro)",
-                    options=valores_opcoes,
-                    format_func=lambda os_id: labels_opcoes[valores_opcoes.index(os_id)] if os_id in valores_opcoes else str(os_id),
-                    key="portal_os_select"
-                )
+                    selecionadas = st.multiselect(
+                        "Selecione as OS para exibir no portal:",
+                        options=opcoes,
+                        format_func=lambda os_id: labels[opcoes.index(os_id)] if os_id in opcoes else str(os_id)
+                    )
 
-                if st.button("Salvar atendimentos exibidos", key="btn_salvar_atends_portal"):
-                    with open(PORTAL_OS_LIST, "w") as f:
-                        json.dump(selecionadas, f)
-                    st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                    st.session_state.exibir_admin_portal = False
-                    st.rerun()
-        elif senha != "":
-            st.error("Senha incorreta!")
+                    if st.button("Salvar atendimentos exibidos"):
+                        with open(PORTAL_OS_LIST, "w") as f:
+                            json.dump([int(x) for x in selecionadas], f)
+                        st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
+                        st.session_state.exibir_admin_portal = False
+                        st.rerun()
+            else:
+                st.error("Senha incorreta!")
 
-    # VISUALIZAÇÃO PÚBLICA
+    # ----- BLOCO PÚBLICO (TODOS) -----
     else:
         if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
             df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
             with open(PORTAL_OS_LIST, "r") as f:
                 os_list = json.load(f)
-            df = df[df["OS"].astype(str).isin([str(x) for x in os_list])]
+            df = df[df["OS"].notnull()]
+            df["OS"] = df["OS"].astype(int)
+            df = df[df["OS"].isin(os_list)]
+
+            # FILTRO DE DATA público (opcional, retire se não quiser para público)
+            df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
+            datas_public = df["Data 1"].dt.strftime("%d/%m/%Y").unique()
+            data_sel_public = st.selectbox("Filtrar por data", options=["Todas"] + list(datas_public), key="filtro_data_public")
+            if data_sel_public != "Todas":
+                df = df[df["Data 1"].dt.strftime("%d/%m/%Y") == data_sel_public]
+
             if df.empty:
                 st.info("Nenhum atendimento disponível.")
             else:
@@ -1044,12 +1050,17 @@ with tabs[3]:
                     servico = row.get("Serviço", "")
                     bairro = row.get("Bairro", "")
                     data = row.get("Data 1", "")
+                    try:
+                        data_fmt = pd.to_datetime(data).strftime("%d/%m/%Y")
+                    except:
+                        data_fmt = str(data)
                     hora_entrada = row.get("Hora de entrada", "")
                     nome_cliente = row.get("Cliente", "")
                     referencia = row.get("Ponto de Referencia", "")
+                    os_id = row.get("OS", "")
                     mensagem = (
                         f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
-                        f"para o dia {data}. Horário de entrada: {hora_entrada}"
+                        f"para o dia {data_fmt}. Horário de entrada: {hora_entrada}"
                     )
                     mensagem_url = urllib.parse.quote(mensagem)
                     celular = "31995265364"
@@ -1074,7 +1085,7 @@ with tabs[3]:
                                 <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
                             </div>
                             <div style="font-size:0.95em; color:#00008B;">
-                                <b>Data:</b> <span>{data}</span><br>
+                                <b>Data:</b> <span>{data_fmt}</span><br>
                                 <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
                                 <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
                             </div>
