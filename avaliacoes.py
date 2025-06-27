@@ -767,6 +767,14 @@ def pipeline(file_path, output_dir):
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
+
+if "rotas_file_path" not in st.session_state:
+    st.session_state.rotas_file_path = None
+if "df_rotas" not in st.session_state:
+    st.session_state.df_rotas = None
+
+
+
 tabs = st.tabs([
     "Upload de Arquivo", 
     "Matriz de Rotas", 
@@ -786,6 +794,7 @@ with tabs[0]:
             else:
                 st.error("Senha incorreta!")
         st.stop()
+
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
         with st.spinner("Processando... Isso pode levar alguns segundos."):
@@ -804,13 +813,16 @@ with tabs[0]:
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             key="download_excel_consolidado"
                         )
-
                         import shutil
                         shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
+                        # >>> Salva o caminho e o DataFrame no session_state:
+                        st.session_state.rotas_file_path = "rotas_bh_dados_tratados_completos.xlsx"
+                        st.session_state.df_rotas = carregar_rotas(st.session_state.rotas_file_path)
                     else:
                         st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
                 except Exception as e:
                     st.error(f"Erro no processamento: {e}")
+
 
 # === ABA 1: MATRIZ DE ROTAS ===
 with tabs[1]:
@@ -943,12 +955,13 @@ with tabs[3]:
             Consulte abaixo os atendimentos disponíveis!
         </p>
         """, unsafe_allow_html=True)
-    # Só lê se já existir arquivo de rotas pronto
-    if not os.path.exists(ROTAS_FILE):
+    
+    # Só lê se já existir arquivo carregado no session_state
+    if not st.session_state.rotas_file_path or not os.path.exists(st.session_state.rotas_file_path):
         st.info("Faça upload e processe o Excel para liberar o portal.")
     else:
-        # Aqui só CARREGA, não processa de novo
-        df = carregar_rotas(ROTAS_FILE)
+        # Usa o DataFrame carregado no session_state, sem reprocessar
+        df = st.session_state.df_rotas
         df = df[df["Data 1"].notnull()]
         df["Data 1"] = pd.to_datetime(df["Data 1"])
         df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
