@@ -901,7 +901,7 @@ with tabs[2]:
         st.info("Nenhum aceite registrado ainda.")
 
 
-with tabs[1]:
+with tabs[3]:
     import urllib.parse
     
     SENHA_CORRETA = "vvv"
