@@ -775,15 +775,8 @@ def pipeline(file_path, output_dir):
     return final_path
 
 
-if "rotas_file_path" not in st.session_state:
-    st.session_state.rotas_file_path = None
-if "df_rotas" not in st.session_state:
-    st.session_state.df_rotas = None
-
 uploaded_file = None
-# =========================
-# INÍCIO DAS ABAS
-# =========================
+
 tabs = st.tabs([
     "Upload de Arquivo",
     "Matriz de Rotas",
@@ -791,22 +784,8 @@ tabs = st.tabs([
     "Portal de Atendimentos"
 ])
 
-# ======= ABA 0 - UPLOAD DE ARQUIVO (Autenticação Individual) =======
+# ========== ABA 0: UPLOAD DE ARQUIVO ==========
 with tabs[0]:
-    if "autenticado0" not in st.session_state:
-        st.session_state.autenticado0 = False
-
-    if not st.session_state.autenticado0:
-        st.warning("Área restrita. Digite a senha para acessar.")
-        senha = st.text_input("Senha:", type="password", key="senha0")
-        if st.button("Entrar", key="btn0"):
-            if senha == "vvv":
-                st.session_state.autenticado0 = True
-                st.experimental_rerun()
-            else:
-                st.error("Senha incorreta!")
-        st.stop()
-
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
         file_bytes = uploaded_file.read()
@@ -814,51 +793,50 @@ with tabs[0]:
             temp_path = os.path.join(tempdir, "input.xlsx")
             with open(temp_path, "wb") as f:
                 f.write(file_bytes)
-            # Coloque aqui sua função pipeline e processamentos desejados
+            # Aqui pode chamar seu pipeline ou processar como quiser
             st.success("Arquivo enviado!")
+            # Exemplo: st.session_state.rotas_file_path = temp_path
 
-# ======= ABA 1 - MATRIZ DE ROTAS (Autenticação Individual) =======
+# ========== ABA 1: MATRIZ DE ROTAS ==========
 with tabs[1]:
-    if "autenticado1" not in st.session_state:
-        st.session_state.autenticado1 = False
+    if os.path.exists(ROTAS_FILE):
+        df_rotas = carregar_rotas(ROTAS_FILE)
+        st.dataframe(df_rotas, use_container_width=True)
+        st.download_button(
+            label="Baixar matriz de rotas",
+            data=open(ROTAS_FILE, "rb").read(),
+            file_name="rotas_bh_dados_tratados_completos.xlsx"
+        )
+    else:
+        st.info("Nenhuma matriz de rotas encontrada. Faça upload primeiro.")
 
-    if not st.session_state.autenticado1:
-        st.warning("Área restrita. Digite a senha para acessar.")
-        senha = st.text_input("Senha:", type="password", key="senha1")
-        if st.button("Entrar", key="btn1"):
-            if senha == "vvv":
-                st.session_state.autenticado1 = True
-                st.experimental_rerun()
-            else:
-                st.error("Senha incorreta!")
-        st.stop()
-
-    # Aqui você coloca seu processamento/exibição da matriz de rotas
-    st.info("Matriz de rotas será exibida aqui.")
-
-# ======= ABA 2 - ACEITES (Autenticação Individual) =======
+# ========== ABA 2: ACEITES ==========
 with tabs[2]:
-    if "autenticado2" not in st.session_state:
-        st.session_state.autenticado2 = False
+    if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
+        df_aceites = carregar_aceites(ACEITES_FILE)
+        df_rotas = carregar_rotas(ROTAS_FILE)
+        df_aceites_completo = pd.merge(
+            df_aceites, df_rotas[
+                ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
+                 "Duração do Serviço", "Hora de entrada", "Observações prestador", "Ponto de Referencia"]
+            ],
+            how="left", on="OS"
+        )
+        st.dataframe(df_aceites_completo, use_container_width=True)
+        output = io.BytesIO()
+        df_aceites_completo.to_excel(output, index=False)
+        st.download_button(
+            label="Baixar histórico de aceites",
+            data=output.getvalue(),
+            file_name="aceites_completo.xlsx"
+        )
+    elif os.path.exists(ACEITES_FILE):
+        df_aceites = carregar_aceites(ACEITES_FILE)
+        st.dataframe(df_aceites)
+    else:
+        st.info("Nenhum aceite registrado ainda.")
 
-    if not st.session_state.autenticado2:
-        st.session_state.autenticado2 = False
-
-    if not st.session_state.autenticado2:
-        st.warning("Área restrita. Digite a senha para acessar.")
-        senha = st.text_input("Senha:", type="password", key="senha2")
-        if st.button("Entrar", key="btn2"):
-            if senha == "vvv":
-                st.session_state.autenticado2 = True
-                st.experimental_rerun()
-            else:
-                st.error("Senha incorreta!")
-        st.stop()
-
-    # Aqui entra sua visualização/processamento dos aceites
-    st.info("Relatório de aceites será exibido aqui.")
-
-# ======= ABA 3 - PORTAL DE ATENDIMENTOS (Sempre Pública, admin só para editar!) =======
+# ========== ABA 3: PORTAL DE ATENDIMENTOS ==========
 with tabs[3]:
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
@@ -870,59 +848,40 @@ with tabs[3]:
         </p>
         """, unsafe_allow_html=True)
 
-    # BLOCO ADMIN PARA LIBERAR NOVOS ATENDIMENTOS (APENAS QUANDO CLICA NO BOTÃO)
-    if "exibir_admin_portal" not in st.session_state:
-        st.session_state.exibir_admin_portal = False
-    if "admin_autenticado_portal" not in st.session_state:
-        st.session_state.admin_autenticado_portal = False
-
-    if st.button("Acesso admin para editar atendimentos do portal"):
-        st.session_state.exibir_admin_portal = True
-
-    if st.session_state.exibir_admin_portal:
-        if not st.session_state.admin_autenticado_portal:
-            senha = st.text_input("Digite a senha de admin:", type="password", key="senha_portal_admin")
-            if st.button("Liberar upload e seleção"):
-                if senha == "vvv":
-                    st.session_state.admin_autenticado_portal = True
-                    st.success("Acesso liberado! Faça o upload do arquivo Excel (com aba 'Clientes').")
-                else:
-                    st.error("Senha incorreta!")
-        if st.session_state.admin_autenticado_portal:
-            uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
-            if uploaded_file:
-                with open(PORTAL_EXCEL, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
-                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-                df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-                datas_unicas = df["Data 1"].dropna().dt.date.unique()
-                data_filtro = st.selectbox(
-                    "Filtrar por data do atendimento", 
-                    options=["Todas"] + [str(d) for d in sorted(datas_unicas)]
-                )
-                df_filtrada = df.copy()
-                if data_filtro != "Todas":
-                    df_filtrada = df[df["Data 1"].dt.date.astype(str) == data_filtro]
-                opcoes = [
-                    (int(row.OS), f'OS {int(row.OS)} | {row.Cliente} | {row.Bairro}')
-                    for _, row in df_filtrada.iterrows() if not pd.isnull(row.OS)
-                ]
-                opcoes_ids = [o[0] for o in opcoes]
-                opcoes_labels = [o[1] for o in opcoes]
-                selecionadas = st.multiselect(
-                    "Selecione os atendimentos (OS | Cliente | Bairro) para exibir no portal",
-                    options=opcoes_ids,
-                    format_func=lambda x: opcoes_labels[opcoes_ids.index(x)] if x in opcoes_ids else str(x),
-                    key="os_multiselect"
-                )
-                if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
-                    with open(PORTAL_OS_LIST, "w") as f:
-                        json.dump(selecionadas, f)
-                    st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                    st.session_state.exibir_admin_portal = False
-                    st.session_state.admin_autenticado_portal = False
-                    st.experimental_rerun()
+    # BLOCO ADMIN: pode deixar público também, se quiser, retirando checagem de senha
+    if st.button("Liberar upload/seleção de atendimentos para o portal"):
+        uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
+        if uploaded_file:
+            with open(PORTAL_EXCEL, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
+            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+            df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
+            datas_unicas = df["Data 1"].dropna().dt.date.unique()
+            data_filtro = st.selectbox(
+                "Filtrar por data do atendimento",
+                options=["Todas"] + [str(d) for d in sorted(datas_unicas)]
+            )
+            df_filtrada = df.copy()
+            if data_filtro != "Todas":
+                df_filtrada = df[df["Data 1"].dt.date.astype(str) == data_filtro]
+            opcoes = [
+                (int(row.OS), f'OS {int(row.OS)} | {row.Cliente} | {row.Bairro}')
+                for _, row in df_filtrada.iterrows() if not pd.isnull(row.OS)
+            ]
+            opcoes_ids = [o[0] for o in opcoes]
+            opcoes_labels = [o[1] for o in opcoes]
+            selecionadas = st.multiselect(
+                "Selecione os atendimentos (OS | Cliente | Bairro) para exibir no portal",
+                options=opcoes_ids,
+                format_func=lambda x: opcoes_labels[opcoes_ids.index(x)] if x in opcoes_ids else str(x),
+                key="os_multiselect"
+            )
+            if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
+                with open(PORTAL_OS_LIST, "w") as f:
+                    json.dump(selecionadas, f)
+                st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
+                st.experimental_rerun()
 
     # BLOCO PÚBLICO: TODOS CONSEGUEM VER OS ATENDIMENTOS LIBERADOS
     if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
