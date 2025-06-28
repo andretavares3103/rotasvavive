@@ -30,7 +30,7 @@ def exibe_formulario_aceite(os_id):
     with col2:
         if st.button("Não posso aceitar"):
             salvar_aceite(os_id, profissional, telefone, False)
-            resposta.success("✅ Obrigado! Daremos retorno sobre o atendimento. Seu aceite foi registrado.")
+            resposta.success("✅ Obrigado! Fique de olho em novas oportunidades.")
             aceite_submetido = True
 
     # Se quiser ocultar o formulário após aceite, basta colocar um return
