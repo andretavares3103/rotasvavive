@@ -7,7 +7,7 @@ from geopy.distance import geodesic
 import tempfile
 import io
 
-st.set_page_config(page_title="Otimização Rotas Vavivê", layout="wide")
+st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
 
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
@@ -16,11 +16,31 @@ def exibe_formulario_aceite(os_id):
     st.header(f"Validação de Aceite (OS {os_id})")
     profissional = st.text_input("Nome da Profissional")
     telefone = st.text_input("Telefone para contato")
-    aceitou = st.checkbox("Aceito realizar este atendimento?")
-    if st.button("Enviar Aceite"):
-        salvar_aceite(os_id, profissional, telefone, aceitou)
-        st.success("Obrigado! Daremos o retorno sobre o atendimento! Seu aceite foi registrado com sucesso.")
+    resposta = st.empty()  # para mensagem dinâmica
+
+    col1, col2 = st.columns(2)
+    aceite_submetido = False
+
+    with col1:
+        if st.button("Sim, aceito este atendimento"):
+            salvar_aceite(os_id, profissional, telefone, True)
+            resposta.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+            aceite_submetido = True
+
+    with col2:
+        if st.button("Não posso aceitar"):
+            salvar_aceite(os_id, profissional, telefone, False)
+            resposta.success("✅ Obrigado! Daremos retorno sobre o atendimento. Seu aceite foi registrado.")
+            aceite_submetido = True
+
+    # Se quiser ocultar o formulário após aceite, basta colocar um return
+    if aceite_submetido:
         st.stop()
+
+
+
+
+
 
 def salvar_aceite(os_id, profissional, telefone, aceitou):
     agora = pd.Timestamp.now()
@@ -100,7 +120,6 @@ def gerar_mensagem_personalizada(
 O atendimento será confirmado após o aceite!
 *1)*    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
 *2)*    Lembre-se das nossas 3 confirmações do atendimento!
-*CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO*
 
 Abs, Vavivê!
 """
@@ -790,6 +809,9 @@ with tabs[1]:
 
 with tabs[2]:
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
+        import io
+        from datetime import datetime
+
         df_aceites = pd.read_excel(ACEITES_FILE)
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         df_aceites_completo = pd.merge(
@@ -799,18 +821,60 @@ with tabs[2]:
             ],
             how="left", on="OS"
         )
-        datas = df_aceites_completo["Data 1"].dropna().sort_values().dt.date.unique()
-        data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
+
+        
+        # ---------- BLOCO DE INDICADOR: Quantos aceites SIM por OS ----------
+        datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
+        data_sel = st.selectbox("Filtrar por data do atendimento", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
+        df_rotas_sel = df_rotas.copy()
+        if data_sel != "Todos":
+            df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date.astype(str) == data_sel]
+        else:
+            hoje = datetime.now().date()
+            df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
+        os_do_dia = df_rotas_sel["OS"].astype(str).unique()
+        aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
+        
+        # Normaliza colunas OS
+        df_rotas_sel["OS"] = df_rotas_sel["OS"].astype(str).str.strip()
+        aceites_do_dia["OS"] = aceites_do_dia["OS"].astype(str).str.strip()
+        
+        # Só aceita SIM
+        aceites_sim = aceites_do_dia[aceites_do_dia["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
+        qtd_aceites_por_os = aceites_sim.groupby("OS").size()
+        
+        df_qtd_aceites = pd.DataFrame({'OS': os_do_dia})
+        df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
+        df_qtd_aceites = df_qtd_aceites.sort_values("OS")
+        
+        st.markdown("### Indicador: Quantidade de Aceites por OS")
+        
+        custom_css = """
+        <style>
+        th, td {
+            min-width: 80px !important;
+            max-width: 100px !important;
+            text-align: center !important;
+        }
+        </style>
+        """
+        st.markdown(custom_css, unsafe_allow_html=True)
+        st.markdown(df_qtd_aceites.to_html(index=False), unsafe_allow_html=True)
+
+        # ---------- FIM DO BLOCO DE INDICADOR ----------
+
+
+        # Filtros detalhados
         clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_aceite")
-        profissionais = df_aceites_completo["Profissional"].dropna().unique()
+        profissionais = df_aceites_completo["Profissional"].dropna().unique() if "Profissional" in df_aceites_completo else []
         profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + list(profissionais), key="prof_aceite")
         df_aceites_filt = df_aceites_completo.copy()
         if data_sel != "Todos":
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Data 1"].dt.date.astype(str) == data_sel]
         if cliente_sel != "Todos":
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Nome Cliente"] == cliente_sel]
-        if profissional_sel != "Todos":
+        if profissional_sel != "Todos" and "Profissional" in df_aceites_filt:
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Profissional"] == profissional_sel]
         st.dataframe(df_aceites_filt, use_container_width=True)
         output = io.BytesIO()
@@ -818,18 +882,20 @@ with tabs[2]:
         st.download_button(
             label="Baixar histórico de aceites (completo)",
             data=output.getvalue(),
-            file_name="aceites_completo.xlsx"
+            file_name="aceites_completo.xlsx",
+            key="download_aceites_completo"
         )
     elif os.path.exists(ACEITES_FILE):
+        import io
         df_aceites = pd.read_excel(ACEITES_FILE)
         st.dataframe(df_aceites)
         output = io.BytesIO()
         df_aceites.to_excel(output, index=False)
         st.download_button(
-            label="Baixar histórico de aceites (completo)",
+            label="Baixar histórico de aceites",
             data=output.getvalue(),
-            file_name="aceites_completo.xlsx",
-            key="download_aceites_completo"
+            file_name="aceites.xlsx",
+            key="download_aceites"
         )
     else:
         st.info("Nenhum aceite registrado ainda.")
