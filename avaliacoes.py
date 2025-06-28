@@ -1043,7 +1043,8 @@ with tabs[3]:
             os_list = json.load(f)
         df = df[pd.to_numeric(df["OS"], errors="coerce").notnull()]
         df["OS"] = df["OS"].astype(int)
-        df = df[df["OS"].isin([int(x) for x in os_list])]        if df.empty:
+        df = df[df["OS"].isin([int(x) for x in os_list])]        
+        if df.empty:
             st.info("Nenhum atendimento disponível.")
         else:
             st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
