@@ -7,10 +7,13 @@ from datetime import datetime, timedelta
 from geopy.distance import geodesic
 import tempfile
 import io
-
-
+import json
+    
 PORTAL_EXCEL = "portal_clientes.xlsx"
 PORTAL_OS_LIST = "portal_os_list.json"
+ACEITES_FILE = "aceites.xlsx"
+ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
+
 
 st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
 
@@ -778,152 +781,84 @@ if "df_rotas" not in st.session_state:
     st.session_state.df_rotas = None
 
 uploaded_file = None
-import streamlit as st
-import pandas as pd
-import numpy as np
-import os
-import tempfile
-import json
-import urllib
-
-PORTAL_EXCEL = "portal_clientes.xlsx"
-PORTAL_OS_LIST = "portal_os_list.json"
-ACEITES_FILE = "aceites.xlsx"
-ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
-
-st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
-
-# ========== Funções utilitárias ==========
-def formatar_hora(h):
-    try:
-        if pd.isnull(h) or h == "":
-            return ""
-        h_str = str(h).strip()
-        if ":" in h_str and len(h_str) == 8:
-            return h_str[:5]
-        if ":" in h_str and len(h_str) == 5:
-            return h_str
-        return pd.to_datetime(h_str).strftime("%H:%M")
-    except:
-        return str(h)
-
-@st.cache_data
-def carregar_rotas(path):
-    return pd.read_excel(path, sheet_name="Rotas")
-
-@st.cache_data
-def carregar_aceites(path):
-    return pd.read_excel(path)
-
-# ========== Layout com abas ==========
+# =========================
+# INÍCIO DAS ABAS
+# =========================
 tabs = st.tabs([
-    "Upload de Arquivo", 
-    "Matriz de Rotas", 
-    "Aceites", 
+    "Upload de Arquivo",
+    "Matriz de Rotas",
+    "Aceites",
     "Portal de Atendimentos"
 ])
 
-# ========== ABA 0: UPLOAD DE ARQUIVO ==========
+# ======= ABA 0 - UPLOAD DE ARQUIVO (Autenticação Individual) =======
 with tabs[0]:
-    if "autenticado_upload" not in st.session_state:
-        st.session_state.autenticado_upload = False
-    if not st.session_state.autenticado_upload:
-        st.warning("Área restrita. Digite a senha para acessar Upload.")
-        senha = st.text_input("Senha:", type="password", key="senha_upload")
-        if st.button("Entrar Upload", key="btn_upload"):
+    if "autenticado0" not in st.session_state:
+        st.session_state.autenticado0 = False
+
+    if not st.session_state.autenticado0:
+        st.warning("Área restrita. Digite a senha para acessar.")
+        senha = st.text_input("Senha:", type="password", key="senha0")
+        if st.button("Entrar", key="btn0"):
             if senha == "vvv":
-                st.session_state.autenticado_upload = True
-                st.rerun()
+                st.session_state.autenticado0 = True
+                st.experimental_rerun()
             else:
                 st.error("Senha incorreta!")
         st.stop()
 
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
-        # Seu pipeline de processamento aqui
-        st.success("Arquivo enviado! (pipeline a ser inserido...)")
-        # Exemplo: Salve e leia o arquivo, depois disponibilize o botão de download
-        # file_bytes = uploaded_file.read()
-        # with tempfile.TemporaryDirectory() as tempdir:
-        #     temp_path = os.path.join(tempdir, "input.xlsx")
-        #     with open(temp_path, "wb") as f:
-        #         f.write(file_bytes)
-        #     # ...restante do seu pipeline/processamento...
-        #     st.success("Processamento finalizado com sucesso!")
-        #     st.download_button(
-        #         label="Baixar Excel consolidado",
-        #         data=open("caminho_do_arquivo_resultado.xlsx", "rb").read(),
-        #         file_name="rotas_bh_dados_tratados_completos.xlsx"
-        #     )
+        file_bytes = uploaded_file.read()
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_path = os.path.join(tempdir, "input.xlsx")
+            with open(temp_path, "wb") as f:
+                f.write(file_bytes)
+            # Coloque aqui sua função pipeline e processamentos desejados
+            st.success("Arquivo enviado!")
 
-# ========== ABA 1: MATRIZ DE ROTAS ==========
+# ======= ABA 1 - MATRIZ DE ROTAS (Autenticação Individual) =======
 with tabs[1]:
-    if "autenticado_matriz" not in st.session_state:
-        st.session_state.autenticado_matriz = False
-    if not st.session_state.autenticado_matriz:
-        st.warning("Área restrita. Digite a senha para acessar Matriz de Rotas.")
-        senha = st.text_input("Senha:", type="password", key="senha_matriz")
-        if st.button("Entrar Matriz", key="btn_matriz"):
+    if "autenticado1" not in st.session_state:
+        st.session_state.autenticado1 = False
+
+    if not st.session_state.autenticado1:
+        st.warning("Área restrita. Digite a senha para acessar.")
+        senha = st.text_input("Senha:", type="password", key="senha1")
+        if st.button("Entrar", key="btn1"):
             if senha == "vvv":
-                st.session_state.autenticado_matriz = True
-                st.rerun()
+                st.session_state.autenticado1 = True
+                st.experimental_rerun()
             else:
                 st.error("Senha incorreta!")
         st.stop()
 
-    # Seu código de exibição/edição da Matriz de Rotas aqui
-    if os.path.exists(ROTAS_FILE):
-        df_rotas = carregar_rotas(ROTAS_FILE)
-        st.dataframe(df_rotas, use_container_width=True)
-        st.download_button(
-            label="Baixar matriz de rotas",
-            data=open(ROTAS_FILE, "rb").read(),
-            file_name="rotas_bh_dados_tratados_completos.xlsx"
-        )
-    else:
-        st.info("Nenhuma matriz de rotas encontrada. Faça upload primeiro.")
+    # Aqui você coloca seu processamento/exibição da matriz de rotas
+    st.info("Matriz de rotas será exibida aqui.")
 
-# ========== ABA 2: ACEITES ==========
+# ======= ABA 2 - ACEITES (Autenticação Individual) =======
 with tabs[2]:
-    if "autenticado_aceites" not in st.session_state:
-        st.session_state.autenticado_aceites = False
-    if not st.session_state.autenticado_aceites:
-        st.warning("Área restrita. Digite a senha para acessar Aceites.")
-        senha = st.text_input("Senha:", type="password", key="senha_aceites")
-        if st.button("Entrar Aceites", key="btn_aceites"):
+    if "autenticado2" not in st.session_state:
+        st.session_state.autenticado2 = False
+
+    if not st.session_state.autenticado2:
+        st.session_state.autenticado2 = False
+
+    if not st.session_state.autenticado2:
+        st.warning("Área restrita. Digite a senha para acessar.")
+        senha = st.text_input("Senha:", type="password", key="senha2")
+        if st.button("Entrar", key="btn2"):
             if senha == "vvv":
-                st.session_state.autenticado_aceites = True
-                st.rerun()
+                st.session_state.autenticado2 = True
+                st.experimental_rerun()
             else:
                 st.error("Senha incorreta!")
         st.stop()
-    # Lógica da aba Aceites
-    if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
-        df_aceites = carregar_aceites(ACEITES_FILE)
-        df_rotas = carregar_rotas(ROTAS_FILE)
-        df_aceites_completo = pd.merge(
-            df_aceites, df_rotas[
-                ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
-                 "Duração do Serviço", "Hora de entrada", "Observações prestador", "Ponto de Referencia"]
-            ],
-            how="left", on="OS"
-        )
-        st.dataframe(df_aceites_completo, use_container_width=True)
-        output = pd.ExcelWriter("aceites_completo.xlsx")
-        df_aceites_completo.to_excel(output, index=False)
-        output.close()
-        st.download_button(
-            label="Baixar histórico de aceites",
-            data=open("aceites_completo.xlsx", "rb").read(),
-            file_name="aceites_completo.xlsx"
-        )
-    elif os.path.exists(ACEITES_FILE):
-        df_aceites = carregar_aceites(ACEITES_FILE)
-        st.dataframe(df_aceites)
-    else:
-        st.info("Nenhum aceite registrado ainda.")
 
-# ========== ABA 3: PORTAL DE ATENDIMENTOS ==========
+    # Aqui entra sua visualização/processamento dos aceites
+    st.info("Relatório de aceites será exibido aqui.")
+
+# ======= ABA 3 - PORTAL DE ATENDIMENTOS (Sempre Pública, admin só para editar!) =======
 with tabs[3]:
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
@@ -935,7 +870,7 @@ with tabs[3]:
         </p>
         """, unsafe_allow_html=True)
 
-    # Bloco admin (não afeta público)
+    # BLOCO ADMIN PARA LIBERAR NOVOS ATENDIMENTOS (APENAS QUANDO CLICA NO BOTÃO)
     if "exibir_admin_portal" not in st.session_state:
         st.session_state.exibir_admin_portal = False
     if "admin_autenticado_portal" not in st.session_state:
@@ -944,7 +879,6 @@ with tabs[3]:
     if st.button("Acesso admin para editar atendimentos do portal"):
         st.session_state.exibir_admin_portal = True
 
-    # Só aparece admin se for acionado
     if st.session_state.exibir_admin_portal:
         if not st.session_state.admin_autenticado_portal:
             senha = st.text_input("Digite a senha de admin:", type="password", key="senha_portal_admin")
@@ -954,7 +888,6 @@ with tabs[3]:
                     st.success("Acesso liberado! Faça o upload do arquivo Excel (com aba 'Clientes').")
                 else:
                     st.error("Senha incorreta!")
-
         if st.session_state.admin_autenticado_portal:
             uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
             if uploaded_file:
@@ -962,8 +895,6 @@ with tabs[3]:
                     f.write(uploaded_file.getbuffer())
                 st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
                 df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-
-                # Filtro de data e multiselect formatado
                 df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
                 datas_unicas = df["Data 1"].dropna().dt.date.unique()
                 data_filtro = st.selectbox(
@@ -991,16 +922,16 @@ with tabs[3]:
                     st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
                     st.session_state.exibir_admin_portal = False
                     st.session_state.admin_autenticado_portal = False
-                    st.rerun()
+                    st.experimental_rerun()
 
-    # Bloco público: exibe sempre que houver atendimentos liberados
+    # BLOCO PÚBLICO: TODOS CONSEGUEM VER OS ATENDIMENTOS LIBERADOS
     if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
         df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
         with open(PORTAL_OS_LIST, "r") as f:
             os_list = json.load(f)
         df = df[pd.to_numeric(df["OS"], errors="coerce").notnull()]
         df["OS"] = df["OS"].astype(int)
-        df = df[df["OS"].isin([int(x) for x in os_list])]        
+        df = df[df["OS"].isin([int(x) for x in os_list])]
         if df.empty:
             st.info("Nenhum atendimento disponível.")
         else:
