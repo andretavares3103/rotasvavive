@@ -974,7 +974,7 @@ with tabs[3]:
         </p>
         """, unsafe_allow_html=True)
 
-    # ------------------ BLOCO ADMIN ------------------
+    # ------------------ BLOCO ADMIN (apenas nesta aba) ------------------
     if "exibir_admin_portal" not in st.session_state:
         st.session_state.exibir_admin_portal = False
     if "admin_autenticado_portal" not in st.session_state:
@@ -983,7 +983,7 @@ with tabs[3]:
     if st.button("Acesso admin para editar atendimentos do portal"):
         st.session_state.exibir_admin_portal = True
 
-    # Só aparece admin se for acionado
+    # Admin: upload e seleção de OS
     if st.session_state.exibir_admin_portal:
         if not st.session_state.admin_autenticado_portal:
             senha = st.text_input("Digite a senha de admin:", type="password", key="senha_portal_admin")
@@ -1001,7 +1001,6 @@ with tabs[3]:
                     f.write(uploaded_file.getbuffer())
                 st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
                 df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-
                 # FILTRO DE DATA
                 df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
                 datas_unicas = df["Data 1"].dropna().dt.date.unique()
@@ -1012,7 +1011,6 @@ with tabs[3]:
                 df_filtrada = df.copy()
                 if data_filtro != "Todas":
                     df_filtrada = df[df["Data 1"].dt.date.astype(str) == data_filtro]
-
                 # Opções formatadas: OS | Cliente | Bairro
                 opcoes = [
                     (int(row.OS), f'OS {int(row.OS)} | {row.Cliente} | {row.Bairro}')
@@ -1020,7 +1018,6 @@ with tabs[3]:
                 ]
                 opcoes_ids = [o[0] for o in opcoes]
                 opcoes_labels = [o[1] for o in opcoes]
-
                 selecionadas = st.multiselect(
                     "Selecione os atendimentos (OS | Cliente | Bairro) para exibir no portal",
                     options=opcoes_ids,
@@ -1034,7 +1031,7 @@ with tabs[3]:
                     st.session_state.exibir_admin_portal = False
                     st.session_state.admin_autenticado_portal = False
                     st.rerun()
-    # -------------- FIM BLOCO ADMIN ------------------
+    # ---------------- FIM BLOCO ADMIN ------------------
 
     # -------------- BLOCO PÚBLICO: EXIBE SEMPRE --------------
     if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
@@ -1043,7 +1040,7 @@ with tabs[3]:
             os_list = json.load(f)
         df = df[pd.to_numeric(df["OS"], errors="coerce").notnull()]
         df["OS"] = df["OS"].astype(int)
-        df = df[df["OS"].isin([int(x) for x in os_list])]        
+        df = df[df["OS"].isin([int(x) for x in os_list])]
         if df.empty:
             st.info("Nenhum atendimento disponível.")
         else:
