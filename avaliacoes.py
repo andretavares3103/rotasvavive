@@ -1,4 +1,3 @@
-import urllib.parse
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,74 +7,20 @@ from geopy.distance import geodesic
 import tempfile
 import io
 
-st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
-
-# BLOCO DE AUTENTICAÇÃO POR SENHA
-if "autenticado" not in st.session_state:
-    st.session_state["autenticado"] = False
-
-if not st.session_state["autenticado"]:
-    st.markdown("### Área Restrita: Digite a senha para acessar as abas")
-    senha = st.text_input("Senha:", type="password")
-    if st.button("Entrar"):
-        if senha == "vvv":
-            st.session_state["autenticado"] = True
-            st.rerun()
-        else:
-            st.error("Senha incorreta!")
-    st.stop()
-#-----------------------------------------------------------------------
-
-
-
+st.set_page_config(page_title="Otimização Rotas Vavivê", layout="wide")
 
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
-
-
-
-@st.cache_data
-def carregar_rotas(path):
-    return pd.read_excel(path, sheet_name="Rotas")
-
-@st.cache_data
-def carregar_clientes(path):
-    return pd.read_excel(path, sheet_name="Clientes")
-
-@st.cache_data
-def carregar_aceites(path):
-    return pd.read_excel(path)
-
 
 def exibe_formulario_aceite(os_id):
     st.header(f"Validação de Aceite (OS {os_id})")
     profissional = st.text_input("Nome da Profissional")
     telefone = st.text_input("Telefone para contato")
-    resposta = st.empty()  # para mensagem dinâmica
-
-    col1, col2 = st.columns(2)
-    aceite_submetido = False
-
-    with col1:
-        if st.button("Sim, aceito este atendimento"):
-            salvar_aceite(os_id, profissional, telefone, True)
-            resposta.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
-            aceite_submetido = True
-
-    with col2:
-        if st.button("Não posso aceitar"):
-            salvar_aceite(os_id, profissional, telefone, False)
-            resposta.success("✅ Obrigado! Daremos retorno sobre o atendimento. Seu aceite foi registrado.")
-            aceite_submetido = True
-
-    # Se quiser ocultar o formulário após aceite, basta colocar um return
-    if aceite_submetido:
+    aceitou = st.checkbox("Aceito realizar este atendimento?")
+    if st.button("Enviar Aceite"):
+        salvar_aceite(os_id, profissional, telefone, aceitou)
+        st.success("Obrigado! Daremos o retorno sobre o atendimento! Seu aceite foi registrado com sucesso.")
         st.stop()
-
-
-
-
-
 
 def salvar_aceite(os_id, profissional, telefone, aceitou):
     agora = pd.Timestamp.now()
@@ -155,6 +100,7 @@ def gerar_mensagem_personalizada(
 O atendimento será confirmado após o aceite!
 *1)*    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
 *2)*    Lembre-se das nossas 3 confirmações do atendimento!
+*CONFIRME SE O ATENDINEMTO AINDA ESTÁ VÁLIDO*
 
 Abs, Vavivê!
 """
@@ -781,19 +727,7 @@ def pipeline(file_path, output_dir):
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
-tabs = st.tabs(["Upload de Arquivo", "Matriz de Rotas", "Aceites", "Portal de Atendimentos"])
-
-
-@st.cache_data(show_spinner="Carregando dados da aba Rotas...")
-def carregar_rotas(path):
-    return pd.read_excel(path, sheet_name="Rotas")
-
-
-
-
-
-
-
+tabs = st.tabs(["Upload de Arquivo", "Matriz de Rotas", "Aceites"])
 
 with tabs[0]:
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
@@ -824,8 +758,7 @@ with tabs[0]:
 
 with tabs[1]:
     if os.path.exists(ROTAS_FILE):
-        df_rotas = carregar_rotas(ROTAS_FILE)
-
+        df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_rotas")
         clientes = df_rotas["Nome Cliente"].dropna().unique()
@@ -857,12 +790,8 @@ with tabs[1]:
 
 with tabs[2]:
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
-        import io
-        from datetime import datetime
-
-        df_aceites = carregar_aceites(ACEITES_FILE)
-        df_rotas = carregar_rotas(ROTAS_FILE)
-        
+        df_aceites = pd.read_excel(ACEITES_FILE)
+        df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         df_aceites_completo = pd.merge(
             df_aceites, df_rotas[
                 ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
@@ -870,60 +799,18 @@ with tabs[2]:
             ],
             how="left", on="OS"
         )
-
-        
-        # ---------- BLOCO DE INDICADOR: Quantos aceites SIM por OS ----------
-        datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
-        data_sel = st.selectbox("Filtrar por data do atendimento", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
-        df_rotas_sel = df_rotas.copy()
-        if data_sel != "Todos":
-            df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date.astype(str) == data_sel]
-        else:
-            hoje = datetime.now().date()
-            df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
-        os_do_dia = df_rotas_sel["OS"].astype(str).unique()
-        aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
-        
-        # Normaliza colunas OS
-        df_rotas_sel["OS"] = df_rotas_sel["OS"].astype(str).str.strip()
-        aceites_do_dia["OS"] = aceites_do_dia["OS"].astype(str).str.strip()
-        
-        # Só aceita SIM
-        aceites_sim = aceites_do_dia[aceites_do_dia["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
-        qtd_aceites_por_os = aceites_sim.groupby("OS").size()
-        
-        df_qtd_aceites = pd.DataFrame({'OS': os_do_dia})
-        df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
-        df_qtd_aceites = df_qtd_aceites.sort_values("OS")
-        
-        st.markdown("### Indicador: Quantidade de Aceites por OS")
-        
-        custom_css = """
-        <style>
-        th, td {
-            min-width: 80px !important;
-            max-width: 100px !important;
-            text-align: center !important;
-        }
-        </style>
-        """
-        st.markdown(custom_css, unsafe_allow_html=True)
-        st.markdown(df_qtd_aceites.to_html(index=False), unsafe_allow_html=True)
-
-        # ---------- FIM DO BLOCO DE INDICADOR ----------
-
-
-        # Filtros detalhados
+        datas = df_aceites_completo["Data 1"].dropna().sort_values().dt.date.unique()
+        data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
         clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_aceite")
-        profissionais = df_aceites_completo["Profissional"].dropna().unique() if "Profissional" in df_aceites_completo else []
+        profissionais = df_aceites_completo["Profissional"].dropna().unique()
         profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + list(profissionais), key="prof_aceite")
         df_aceites_filt = df_aceites_completo.copy()
         if data_sel != "Todos":
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Data 1"].dt.date.astype(str) == data_sel]
         if cliente_sel != "Todos":
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Nome Cliente"] == cliente_sel]
-        if profissional_sel != "Todos" and "Profissional" in df_aceites_filt:
+        if profissional_sel != "Todos":
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Profissional"] == profissional_sel]
         st.dataframe(df_aceites_filt, use_container_width=True)
         output = io.BytesIO()
@@ -931,156 +818,18 @@ with tabs[2]:
         st.download_button(
             label="Baixar histórico de aceites (completo)",
             data=output.getvalue(),
-            file_name="aceites_completo.xlsx",
-            key="download_aceites_completo"
+            file_name="aceites_completo.xlsx"
         )
     elif os.path.exists(ACEITES_FILE):
-        import io
-        df_aceites = carregar_aceites(ACEITES_FILE)
+        df_aceites = pd.read_excel(ACEITES_FILE)
         st.dataframe(df_aceites)
         output = io.BytesIO()
         df_aceites.to_excel(output, index=False)
         st.download_button(
-            label="Baixar histórico de aceites",
+            label="Baixar histórico de aceites (completo)",
             data=output.getvalue(),
-            file_name="aceites.xlsx",
-            key="download_aceites"
+            file_name="aceites_completo.xlsx",
+            key="download_aceites_completo"
         )
     else:
         st.info("Nenhum aceite registrado ainda.")
-
-
-with tabs[3]:
-    st.markdown("""
-        <div style='display:flex;align-items:center;gap:16px'>
-            <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
-            <span style='font-size:1.7em;font-weight:700;color:#18d96b;letter-spacing:1px;'>PORTAL DE ATENDIMENTOS</span>
-        </div>
-        <p style='color:#666;font-size:1.08em;margin:8px 0 18px 0'>
-            Consulte abaixo os atendimentos disponíveis!
-        </p>
-        """, unsafe_allow_html=True)
-
-    if not os.path.exists(ROTAS_FILE):
-        st.info("Faça upload e processe o Excel para liberar o portal.")
-    else:
-        # 1️⃣ Lê a aba Clientes do arquivo existente (já carregado no app)
-        df = carregar_rotas(ROTAS_FILE)  # usa cache
-        df = df[df["Data 1"].notnull()]
-        df["Data 1"] = pd.to_datetime(df["Data 1"])
-        df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
-        dias_pt = {
-            "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
-            "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
-        }
-        df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
-        df = df[df["OS"].notnull()]
-        df = df.copy()
-        if "os_list" not in st.session_state:
-            st.session_state.os_list = []
-        
-        # Aqui já pode garantir as colunas necessárias ANTES de qualquer filtro
-        if "Data 1" not in df.columns:
-            st.warning("A aba 'Clientes' não possui a coluna 'Data 1'. Corrija o arquivo antes de continuar.")
-            st.stop()
-            df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-            df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
-            dias_pt = {
-                "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
-                "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
-            }
-            df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
-        else:
-            df["Data 1 Formatada"] = "-"
-            df["Dia da Semana"] = "-"
-
-        # 2️⃣ Seletor protegido por senha para admins
-# ---- BLOCO DE SENHA ADMIN ----
-        if "exibir_admin" not in st.session_state:
-            st.session_state.exibir_admin = False
-        
-        senha = st.text_input("Área Administrativa - digite a senha para selecionar OS", type="password", value="")
-        if st.button("Liberar seleção de atendimentos (admin)"):
-            if senha == "vvv":
-                st.session_state.exibir_admin = True
-            else:
-                st.warning("Senha incorreta.")
-        
-        # ---- BLOCO DE SELEÇÃO DE ATENDIMENTOS (APÓS A SENHA) ----
-        if st.session_state.exibir_admin:
-            if "os_list" not in st.session_state:
-                st.session_state.os_list = []
-        
-            os_opcoes = [
-                f'{row["Nome Cliente"]} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Plano"]}'
-                for idx, row in df.iterrows()
-            ]
-            os_ids = list(df["OS"])
-        
-            os_selecionadas = st.multiselect(
-                "Selecione os atendimentos para exibir",
-                options=os_ids,
-                format_func=lambda x: os_opcoes[os_ids.index(x)],
-                default=st.session_state.os_list
-            )
-        
-            if st.button("Salvar lista de OS exibidas"):
-                st.session_state.os_list = os_selecionadas
-                st.success("Seleção salva!")
-        
-
-        # Exibe sempre os cards das OS permitidas
-        df_visiveis = df[df["OS"].isin(st.session_state.os_list)].copy()
-        if df_visiveis.empty:
-            st.info("Nenhum atendimento disponível para exibição.")
-        else:
-            st.markdown("<h5>Atendimentos disponíveis:</h5>", unsafe_allow_html=True)
-            for _, row in df_visiveis.iterrows():
-                servico = row.get("Serviço", "")
-                bairro = row.get("Bairro", "")
-                data = row.get("Data 1 Formatada", "")
-                dia_semana = row.get("Dia da Semana", "")
-                horas_servico = row.get("Horas de serviço", "")
-                hora_entrada = row.get("Hora de entrada", "")
-                referencia = row.get("Ponto de Referencia", "")
-                nome_cliente = row.get("Nome Cliente", "")
-                mensagem = (
-                    f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
-                    f"dia {dia_semana}, {data}. Horário de entrada: {hora_entrada}"
-                )
-                mensagem_url = urllib.parse.quote(mensagem)
-                celular = "31995265364"
-                whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
-
-                st.markdown(f"""
-                <div style="
-                    background: #fff;
-                    border: 1.5px solid #eee;
-                    border-radius: 18px;
-                    padding: 18px 18px 12px 18px;
-                    margin-bottom: 14px;
-                    min-width: 260px;
-                    max-width: 440px;
-                    color: #00008B;
-                    font-family: Arial, sans-serif;
-                ">
-                    <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
-                        {servico}
-                    </div>
-                    <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
-                        <b style="color:#00008B;">Cliente:</b> <span>{nome_cliente}</span>
-                        <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
-                    </div>
-                    <div style="font-size:0.95em; color:#00008B;">
-                        <b>Data:</b> <span>{data} ({dia_semana})</span><br>
-                        <b>Duração:</b> <span>{horas_servico}</span><br>
-                        <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
-                        <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
-                    </div>
-                    <a href="{whatsapp_url}" target="_blank">
-                        <button style="margin-top:12px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.02em; font-weight:700;cursor:pointer; width:100%;">
-                            Aceitar Atendimento no WhatsApp
-                        </button>
-                    </a>
-                </div>
-                """, unsafe_allow_html=True)
