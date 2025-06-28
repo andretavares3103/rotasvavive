@@ -1041,8 +1041,9 @@ with tabs[3]:
         df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
         with open(PORTAL_OS_LIST, "r") as f:
             os_list = json.load(f)
-        df = df[df["OS"].astype(int).isin([int(x) for x in os_list])]
-        if df.empty:
+        df = df[pd.to_numeric(df["OS"], errors="coerce").notnull()]
+        df["OS"] = df["OS"].astype(int)
+        df = df[df["OS"].isin([int(x) for x in os_list])]        if df.empty:
             st.info("Nenhum atendimento disponível.")
         else:
             st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
