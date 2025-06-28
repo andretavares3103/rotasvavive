@@ -784,7 +784,7 @@ tabs = st.tabs([
     "Portal de Atendimentos"
 ])
 
-# ========== ABA 0: UPLOAD DE ARQUIVO ==========
+# =========== ABA 0: UPLOAD DE ARQUIVO ===========
 with tabs[0]:
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
@@ -793,11 +793,22 @@ with tabs[0]:
             temp_path = os.path.join(tempdir, "input.xlsx")
             with open(temp_path, "wb") as f:
                 f.write(file_bytes)
-            # Aqui pode chamar seu pipeline ou processar como quiser
-            st.success("Arquivo enviado!")
-            # Exemplo: st.session_state.rotas_file_path = temp_path
+            try:
+                final_path = pipeline(temp_path, tempdir)
+                # Copia o arquivo processado para o caminho definitivo esperado pelas outras abas
+                with open(final_path, "rb") as f_src:
+                    with open(ROTAS_FILE, "wb") as f_dest:
+                        f_dest.write(f_src.read())
+                st.success("Arquivo enviado e matriz de rotas gerada com sucesso!")
+                st.download_button(
+                    label="Baixar Excel consolidado",
+                    data=open(ROTAS_FILE, "rb").read(),
+                    file_name="rotas_bh_dados_tratados_completos.xlsx"
+                )
+            except Exception as e:
+                st.error(f"Erro ao processar o arquivo: {e}")
 
-# ========== ABA 1: MATRIZ DE ROTAS ==========
+# =========== ABA 1: MATRIZ DE ROTAS ===========
 with tabs[1]:
     if os.path.exists(ROTAS_FILE):
         df_rotas = carregar_rotas(ROTAS_FILE)
@@ -810,7 +821,7 @@ with tabs[1]:
     else:
         st.info("Nenhuma matriz de rotas encontrada. Faça upload primeiro.")
 
-# ========== ABA 2: ACEITES ==========
+# =========== ABA 2: ACEITES ===========
 with tabs[2]:
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         df_aceites = carregar_aceites(ACEITES_FILE)
@@ -836,7 +847,7 @@ with tabs[2]:
     else:
         st.info("Nenhum aceite registrado ainda.")
 
-# ========== ABA 3: PORTAL DE ATENDIMENTOS ==========
+# =========== ABA 3: PORTAL DE ATENDIMENTOS ===========
 with tabs[3]:
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
@@ -848,42 +859,7 @@ with tabs[3]:
         </p>
         """, unsafe_allow_html=True)
 
-    # BLOCO ADMIN: pode deixar público também, se quiser, retirando checagem de senha
-    if st.button("Liberar upload/seleção de atendimentos para o portal"):
-        uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
-        if uploaded_file:
-            with open(PORTAL_EXCEL, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-            df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-            datas_unicas = df["Data 1"].dropna().dt.date.unique()
-            data_filtro = st.selectbox(
-                "Filtrar por data do atendimento",
-                options=["Todas"] + [str(d) for d in sorted(datas_unicas)]
-            )
-            df_filtrada = df.copy()
-            if data_filtro != "Todas":
-                df_filtrada = df[df["Data 1"].dt.date.astype(str) == data_filtro]
-            opcoes = [
-                (int(row.OS), f'OS {int(row.OS)} | {row.Cliente} | {row.Bairro}')
-                for _, row in df_filtrada.iterrows() if not pd.isnull(row.OS)
-            ]
-            opcoes_ids = [o[0] for o in opcoes]
-            opcoes_labels = [o[1] for o in opcoes]
-            selecionadas = st.multiselect(
-                "Selecione os atendimentos (OS | Cliente | Bairro) para exibir no portal",
-                options=opcoes_ids,
-                format_func=lambda x: opcoes_labels[opcoes_ids.index(x)] if x in opcoes_ids else str(x),
-                key="os_multiselect"
-            )
-            if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
-                with open(PORTAL_OS_LIST, "w") as f:
-                    json.dump(selecionadas, f)
-                st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                st.experimental_rerun()
-
-    # BLOCO PÚBLICO: TODOS CONSEGUEM VER OS ATENDIMENTOS LIBERADOS
+    # Bloco público: exibe sempre que houver atendimentos liberados
     if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
         df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
         with open(PORTAL_OS_LIST, "r") as f:
