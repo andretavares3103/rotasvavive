@@ -778,7 +778,6 @@ if "df_rotas" not in st.session_state:
     st.session_state.df_rotas = None
 
 uploaded_file = None
-
 import streamlit as st
 import pandas as pd
 import numpy as np
