@@ -1,4 +1,4 @@
-import urllib.parse
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,34 +8,10 @@ from geopy.distance import geodesic
 import tempfile
 import io
 
-
-PORTAL_EXCEL = "portal_clientes.xlsx"
-PORTAL_OS_LIST = "portal_os_list.json"
-
 st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
-
-
-
-
-
 
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
-
-
-
-@st.cache_data
-def carregar_rotas(path):
-    return pd.read_excel(path, sheet_name="Rotas")
-
-@st.cache_data
-def carregar_clientes(path):
-    return pd.read_excel(path, sheet_name="Clientes")
-
-@st.cache_data
-def carregar_aceites(path):
-    return pd.read_excel(path)
-
 
 def exibe_formulario_aceite(os_id):
     st.header(f"Validação de Aceite (OS {os_id})")
@@ -55,7 +31,7 @@ def exibe_formulario_aceite(os_id):
     with col2:
         if st.button("Não posso aceitar"):
             salvar_aceite(os_id, profissional, telefone, False)
-            resposta.success("✅ Obrigado! Daremos retorno sobre o atendimento. Seu aceite foi registrado.")
+            resposta.success("✅ Obrigado! Fique de olho em novas oportunidades.")
             aceite_submetido = True
 
     # Se quiser ocultar o formulário após aceite, basta colocar um return
@@ -771,114 +747,74 @@ def pipeline(file_path, output_dir):
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
+tabs = st.tabs(["Upload de Arquivo", "Matriz de Rotas", "Aceites", "Portal Atendimentos"])
 
-if "rotas_file_path" not in st.session_state:
-    st.session_state.rotas_file_path = None
-if "df_rotas" not in st.session_state:
-    st.session_state.df_rotas = None
-
-uploaded_file = None
-
-tabs = st.tabs([
-    "Upload de Arquivo", 
-    "Matriz de Rotas", 
-    "Aceites", 
-    "Portal de Atendimentos"
-])
-
-# === ABA 0: UPLOAD DE ARQUIVO ===
 with tabs[0]:
-    if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
-        st.warning("Área restrita. Digite a senha para acessar.")
-        senha = st.text_input("Senha:", type="password", key="senha0")
-        if st.button("Entrar", key="btn0"):
-            if senha == "vvv":
-                st.session_state["autenticado"] = True
-                st.rerun()
-            else:
-                st.error("Senha incorreta!")
-        st.stop()
-
-        uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
-    if uploaded_file:
-        # Grava arquivo em bytes para não depender de caminho no disco
-        file_bytes = uploaded_file.read()
-        with tempfile.TemporaryDirectory() as tempdir:
-            temp_path = os.path.join(tempdir, "input.xlsx")
-            with open(temp_path, "wb") as f:
-                f.write(file_bytes)
-            try:
-                excel_path = pipeline(temp_path, tempdir)  # Seu pipeline salva o Excel final nesse caminho
-                # Em vez de salvar caminho, carrega o DataFrame da aba Rotas
-                df_matriz_rotas = pd.read_excel(excel_path, sheet_name="Rotas")
-                st.session_state.df_matriz_rotas = df_matriz_rotas.copy()
-                st.success("Processamento finalizado com sucesso!")
-                # Botão de download se quiser
-                st.download_button(
-                    label="Baixar Excel consolidado",
-                    data=open(excel_path, "rb").read(),
-                    file_name="rotas_bh_dados_tratados_completos.xlsx"
-                )
-            except Exception as e:
-                st.error(f"Erro no processamento: {e}")
-
-
-
-# === ABA 1: MATRIZ DE ROTAS ===
-with tabs[0]:
-    if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
-        st.warning("Área restrita. Digite a senha para acessar.")
-        senha = st.text_input("Senha:", type="password", key="senha0")
-        if st.button("Entrar", key="btn0"):
-            if senha == "vvv":
-                st.session_state["autenticado"] = True
-                st.rerun()
-            else:
-                st.error("Senha incorreta!")
-        st.stop()
-
-    # Upload de arquivo fica fora do bloco de senha
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
-    
     if uploaded_file:
-        # Grava arquivo em bytes para não depender de caminho no disco
-        file_bytes = uploaded_file.read()
-        with tempfile.TemporaryDirectory() as tempdir:
-            temp_path = os.path.join(tempdir, "input.xlsx")
-            with open(temp_path, "wb") as f:
-                f.write(file_bytes)
-            try:
-                excel_path = pipeline(temp_path, tempdir)  # Seu pipeline salva o Excel final nesse caminho
-                # Em vez de salvar caminho, carrega o DataFrame da aba Rotas
-                df_matriz_rotas = pd.read_excel(excel_path, sheet_name="Rotas")
-                st.session_state.df_matriz_rotas = df_matriz_rotas.copy()
-                st.success("Processamento finalizado com sucesso!")
-                # Botão de download se quiser
-                st.download_button(
-                    label="Baixar Excel consolidado",
-                    data=open(excel_path, "rb").read(),
-                    file_name="rotas_bh_dados_tratados_completos.xlsx"
-                )
-            except Exception as e:
-                st.error(f"Erro no processamento: {e}")
+        with st.spinner("Processando... Isso pode levar alguns segundos."):
+            with tempfile.TemporaryDirectory() as tempdir:
+                temp_path = os.path.join(tempdir, uploaded_file.name)
+                with open(temp_path, "wb") as f:
+                    f.write(uploaded_file.read())
+                try:
+                    excel_path = pipeline(temp_path, tempdir)
+                    if os.path.exists(excel_path):
+                        st.success("Processamento finalizado com sucesso!")
+                        st.download_button(
+                            label="📥 Baixar Excel consolidado",
+                            data=open(excel_path, "rb").read(),
+                            file_name="rotas_bh_dados_tratados_completos.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="download_excel_consolidado"
+                        )
 
-# === ABA 2: ACEITES ===
+                        import shutil
+                        shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
+                    else:
+                        st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
+                except Exception as e:
+                    st.error(f"Erro no processamento: {e}")
+
+with tabs[1]:
+    if os.path.exists(ROTAS_FILE):
+        df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
+        datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
+        data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_rotas")
+        clientes = df_rotas["Nome Cliente"].dropna().unique()
+        cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_rotas")
+        profissionais = []
+        for i in range(1, 21):
+            profissionais.extend(df_rotas[f"Nome Prestador {i}"].dropna().unique())
+        profissionais = list(set([p for p in profissionais if isinstance(p, str)]))
+        profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + profissionais, key="prof_rotas")
+        df_rotas_filt = df_rotas.copy()
+        if data_sel != "Todos":
+            df_rotas_filt = df_rotas_filt[df_rotas_filt["Data 1"].dt.date.astype(str) == data_sel]
+        if cliente_sel != "Todos":
+            df_rotas_filt = df_rotas_filt[df_rotas_filt["Nome Cliente"] == cliente_sel]
+        if profissional_sel != "Todos":
+            mask = False
+            for i in range(1, 21):
+                mask |= (df_rotas_filt[f"Nome Prestador {i}"] == profissional_sel)
+            df_rotas_filt = df_rotas_filt[mask]
+        st.dataframe(df_rotas_filt, use_container_width=True)
+        st.download_button(
+            label="📥 Baixar Excel consolidado",
+            data=open(ROTAS_FILE, "rb").read(),
+            file_name="rotas_bh_dados_tratados_completos.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
+
 with tabs[2]:
-    if "autenticado" not in st.session_state or not st.session_state["autenticado"]:
-        st.warning("Área restrita. Digite a senha para acessar.")
-        senha = st.text_input("Senha:", type="password", key="senha2")
-        if st.button("Entrar", key="btn2"):
-            if senha == "vvv":
-                st.session_state["autenticado"] = True
-                st.rerun()
-            else:
-                st.error("Senha incorreta!")
-        st.stop()
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
-        df_aceites = carregar_aceites(ACEITES_FILE)
-        df_rotas = carregar_rotas(ROTAS_FILE)
+
+        df_aceites = pd.read_excel(ACEITES_FILE)
+        df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         df_aceites_completo = pd.merge(
             df_aceites, df_rotas[
                 ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
@@ -886,6 +822,9 @@ with tabs[2]:
             ],
             how="left", on="OS"
         )
+
+        
+        # ---------- BLOCO DE INDICADOR: Quantos aceites SIM por OS ----------
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data do atendimento", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
         df_rotas_sel = df_rotas.copy()
@@ -896,15 +835,37 @@ with tabs[2]:
             df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
         os_do_dia = df_rotas_sel["OS"].astype(str).unique()
         aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
+        
+        # Normaliza colunas OS
         df_rotas_sel["OS"] = df_rotas_sel["OS"].astype(str).str.strip()
         aceites_do_dia["OS"] = aceites_do_dia["OS"].astype(str).str.strip()
+        
+        # Só aceita SIM
         aceites_sim = aceites_do_dia[aceites_do_dia["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
         qtd_aceites_por_os = aceites_sim.groupby("OS").size()
+        
         df_qtd_aceites = pd.DataFrame({'OS': os_do_dia})
         df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
         df_qtd_aceites = df_qtd_aceites.sort_values("OS")
+        
         st.markdown("### Indicador: Quantidade de Aceites por OS")
+        
+        custom_css = """
+        <style>
+        th, td {
+            min-width: 80px !important;
+            max-width: 100px !important;
+            text-align: center !important;
+        }
+        </style>
+        """
+        st.markdown(custom_css, unsafe_allow_html=True)
         st.markdown(df_qtd_aceites.to_html(index=False), unsafe_allow_html=True)
+
+        # ---------- FIM DO BLOCO DE INDICADOR ----------
+
+
+        # Filtros detalhados
         clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_aceite")
         profissionais = df_aceites_completo["Profissional"].dropna().unique() if "Profissional" in df_aceites_completo else []
@@ -927,7 +888,7 @@ with tabs[2]:
         )
     elif os.path.exists(ACEITES_FILE):
         import io
-        df_aceites = carregar_aceites(ACEITES_FILE)
+        df_aceites = pd.read_excel(ACEITES_FILE)
         st.dataframe(df_aceites)
         output = io.BytesIO()
         df_aceites.to_excel(output, index=False)
@@ -941,11 +902,11 @@ with tabs[2]:
         st.info("Nenhum aceite registrado ainda.")
 
 
-import json
-import os
+import streamlit as st
+import pandas as pd
+import urllib.parse
 
-PORTAL_EXCEL = "portal_clientes.xlsx"
-PORTAL_OS_LIST = "portal_os_list.json"
+SENHA_CORRETA = "vvv"
 
 def formatar_hora(h):
     try:
@@ -959,6 +920,90 @@ def formatar_hora(h):
         return pd.to_datetime(h_str).strftime("%H:%M")
     except:
         return str(h)
+
+def listar_atendimentos_cartoes(arquivo):
+    df = pd.read_excel(arquivo, sheet_name="Clientes")
+    df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
+    dias_pt = {
+        "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
+        "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
+    }
+    df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
+    df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
+    df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
+    df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
+    df = df[df["OS"].notnull()]
+    df = df.sort_values("Data 1")
+    opcoes = [
+        (
+            f'OS {row.OS} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Bairro"]} | {row["Cliente"]}',
+            int(row.OS)
+        )
+        for _, row in df.iterrows()
+    ]
+    return opcoes, df
+
+def gerar_cartoes(df):
+    cards = []
+    for _, row in df.iterrows():
+        servico = row.get("Serviço", "")
+        bairro = row.get("Bairro", "")
+        data = row.get("Data 1 Formatada", "")
+        dia_semana = row.get("Dia da Semana", "")
+        horas_servico = row.get("Horas de serviço", "")
+        hora_entrada = row.get("Hora de entrada", "")
+        referencia = row.get("Ponto de Referencia", "")
+        os_num = row.get("OS", "")
+        mensagem = (
+            f"Aceito a OS{os_num} do atendimento de {servico} no bairro {bairro}, "
+            f"para o dia {dia_semana}, {data}. "
+            f"Horário de entrada: {hora_entrada}"
+        )
+        mensagem_url = urllib.parse.quote(mensagem)
+        celular = "31995265364"
+        whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
+        card_html = f"""
+        <div style="
+            background: #fff;
+            border: 1.5px solid #eee;
+            border-radius: 18px;
+            padding: 24px 22px 16px 22px;
+            margin: 18px;
+            min-width: 300px;
+            max-width: 380px;
+            color: #00008B;
+            font-family: Arial, sans-serif;
+        ">
+            <div style="font-size:1.35em; font-weight:bold; color:#00008B; margin-bottom:2px;">
+                {servico}
+            </div>
+            <div style="font-size:1.10em; color:#00008B; margin-bottom:8px;">
+                <b style="color:#00008B;">Bairro:</b> <span style="color:#00008B;">{bairro}</span>
+            </div>
+            <div style="font-size:1em; color:#00008B;">
+                <b style="color:#00008B;">Data:</b> <span style="color:#00008B;">{data} ({dia_semana})</span><br>
+                <b style="color:#00008B;">Duração do atendimento:</b> <span style="color:#00008B;">{horas_servico}</span><br>
+                <b style="color:#00008B;">Hora de entrada:</b> <span style="color:#00008B;">{hora_entrada}</span><br>
+                <b style="color:#00008B;">Ponto de Referência:</b> <span style="color:#00008B;">{referencia if referencia and referencia != 'nan' else '-'}</span>
+            </div>
+            <a href="{whatsapp_url}" target="_blank">
+                <button style="margin-top:18px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.07em; font-weight:700;cursor:pointer; width:100%;">
+                    Aceitar Atendimento no WhatsApp
+                </button>
+            </a>
+        </div>
+        """
+        cards.append(card_html)
+    if not cards:
+        return "<div style='color:orange;'>Nenhum atendimento selecionado.</div>"
+    grid_html = f"""
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px;">
+        {''.join(cards)}
+    </div>
+    """
+    return grid_html
+
+
 
 with tabs[3]:
     st.markdown("""
