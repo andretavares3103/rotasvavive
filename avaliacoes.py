@@ -1003,3 +1003,102 @@ def gerar_cartoes(df):
     return grid_html
 
 
+
+with tabs[3]:
+    st.markdown("""
+        <div style='display:flex;align-items:center;gap:16px'>
+            <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
+            <span style='font-size:1.7em;font-weight:700;color:#18d96b;letter-spacing:1px;'>PORTAL DE ATENDIMENTOS</span>
+        </div>
+        <p style='color:#666;font-size:1.08em;margin:8px 0 18px 0'>
+            Consulte abaixo os atendimentos disponíveis!
+        </p>
+        """, unsafe_allow_html=True)
+
+    # ----- Botão para liberar o modo admin -----
+    if "exibir_admin_portal" not in st.session_state:
+        st.session_state.exibir_admin_portal = False
+    if "admin_autenticado_portal" not in st.session_state:
+        st.session_state.admin_autenticado_portal = False
+
+    if st.button("Acesso admin para editar atendimentos do portal"):
+        st.session_state.exibir_admin_portal = True
+
+
+        # Só exibe upload e seleção SE autenticado:
+        if st.session_state.admin_autenticado_portal:
+            uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
+            if uploaded_file:
+                with open(PORTAL_EXCEL, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
+                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+                opcoes = [int(row.OS) for _, row in df.iterrows() if not pd.isnull(row.OS)]
+                selecionadas = st.multiselect("Selecione as OS para exibir no portal", opcoes, key="os_multiselect")
+                if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
+                    with open(PORTAL_OS_LIST, "w") as f:
+                        json.dump(selecionadas, f)
+                    st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
+                    # Limpa flags de admin (volta modo público)
+                    st.session_state.exibir_admin_portal = False
+                    st.session_state.admin_autenticado_portal = False
+                    st.experimental_rerun()
+
+    # ----- BLOCO VISUALIZAÇÃO: TODOS USUÁRIOS -----
+    if not st.session_state.exibir_admin_portal:
+        if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
+            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+            with open(PORTAL_OS_LIST, "r") as f:
+                os_list = json.load(f)
+            df = df[df["OS"].astype(str).isin([str(x) for x in os_list])]
+            if df.empty:
+                st.info("Nenhum atendimento disponível.")
+            else:
+                st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
+                for _, row in df.iterrows():
+                    servico = row.get("Serviço", "")
+                    bairro = row.get("Bairro", "")
+                    data = row.get("Data 1", "")
+                    hora_entrada = row.get("Hora de entrada", "")
+                    nome_cliente = row.get("Cliente", "")
+                    referencia = row.get("Ponto de Referencia", "")
+                    mensagem = (
+                        f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
+                        f"para o dia {data}. Horário de entrada: {hora_entrada}"
+                    )
+                    mensagem_url = urllib.parse.quote(mensagem)
+                    celular = "31995265364"
+                    whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
+                    st.markdown(f"""
+                        <div style="
+                            background: #fff;
+                            border: 1.5px solid #eee;
+                            border-radius: 18px;
+                            padding: 18px 18px 12px 18px;
+                            margin-bottom: 14px;
+                            min-width: 260px;
+                            max-width: 440px;
+                            color: #00008B;
+                            font-family: Arial, sans-serif;
+                        ">
+                            <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
+                                {servico}
+                            </div>
+                            <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
+                                <b style="color:#00008B;">Cliente:</b> <span>{nome_cliente}</span>
+                                <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
+                            </div>
+                            <div style="font-size:0.95em; color:#00008B;">
+                                <b>Data:</b> <span>{data}</span><br>
+                                <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
+                                <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
+                            </div>
+                            <a href="{whatsapp_url}" target="_blank">
+                                <button style="margin-top:12px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.02em; font-weight:700;cursor:pointer; width:100%;">
+                                    Aceitar Atendimento no WhatsApp
+                                </button>
+                            </a>
+                        </div>
+                    """, unsafe_allow_html=True)
+        else:
+            st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
