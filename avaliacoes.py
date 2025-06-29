@@ -754,6 +754,21 @@ def pipeline(file_path, output_dir):
 tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
 
 with tabs[1]:
+
+    with tabs[1]:
+    if "senha_upload_ok" not in st.session_state:
+        st.session_state["senha_upload_ok"] = False
+
+    if not st.session_state["senha_upload_ok"]:
+        senha_upload = st.text_input("Digite a senha de acesso para Upload:", type="password", key="senha_upload")
+        if st.button("Entrar", key="btn_senha_upload"):
+            if senha_upload == "SENHA_UPLOAD":
+                st.session_state["senha_upload_ok"] = True
+            else:
+                st.error("Senha incorreta.")
+        st.stop()
+
+    
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
         with st.spinner("Processando... Isso pode levar alguns segundos."):
