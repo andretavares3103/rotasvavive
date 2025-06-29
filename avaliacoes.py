@@ -755,18 +755,7 @@ tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", 
 
 
 with tabs[1]:
-    if "senha_upload_ok" not in st.session_state:
-        st.session_state["senha_upload_ok"] = False
-    
-    if not st.session_state["senha_upload_ok"]:
-        senha_upload = st.text_input("Digite a senha de acesso para Upload:", type="password", key="senha_upload")
-        if st.button("Entrar", key="btn_senha_upload"):
-            if senha_upload == "vvv":
-                st.session_state["senha_upload_ok"] = True
-            else:
-                st.error("Senha incorreta.")
-        st.stop()
-    
+
     
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
@@ -795,19 +784,6 @@ with tabs[1]:
                     st.error(f"Erro no processamento: {e}")    
 
 with tabs[2]:
-    if "senha_matriz_ok" not in st.session_state:
-        st.session_state["senha_matriz_ok"] = False
-
-    if not st.session_state["senha_matriz_ok"]:
-        senha_matriz = st.text_input("Digite a senha de acesso para Matriz de Rotas:", type="password", key="senha_matriz")
-        if st.button("Entrar", key="btn_senha_matriz"):
-            if senha_matriz == "vvv":
-                st.session_state["senha_matriz_ok"] = True
-            else:
-                st.error("Senha incorreta.")
-        st.stop()   
-
-
     
     if os.path.exists(ROTAS_FILE):
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
@@ -840,21 +816,11 @@ with tabs[2]:
     else:
         st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
 
+
+
 with tabs[3]:
-    if "senha_aceites_ok" not in st.session_state:
-        st.session_state["senha_aceites_ok"] = False
-
-    if not st.session_state["senha_aceites_ok"]:
-        senha_aceites = st.text_input("Digite a senha de acesso para Aceites:", type="password", key="senha_aceites")
-        if st.button("Entrar", key="btn_senha_aceites"):
-            if senha_aceites == "vvv":
-                st.session_state["senha_aceites_ok"] = True
-            else:
-                st.error("Senha incorreta.")
-        st.stop()
 
 
-    
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
