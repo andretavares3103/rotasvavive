@@ -905,10 +905,106 @@ import streamlit as st
 import pandas as pd
 import urllib.parse
 
-st.set_page_config(page_title="Portal de Atendimentos Vavivê BH", layout="wide")
+SENHA_CORRETA = "vvv"
 
+def formatar_hora(h):
+    try:
+        if pd.isnull(h) or h == "":
+            return ""
+        h_str = str(h).strip()
+        if ":" in h_str and len(h_str) == 8:
+            return h_str[:5]
+        if ":" in h_str and len(h_str) == 5:
+            return h_str
+        return pd.to_datetime(h_str).strftime("%H:%M")
+    except:
+        return str(h)
+
+def listar_atendimentos_cartoes(arquivo):
+    df = pd.read_excel(arquivo, sheet_name="Clientes")
+    df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
+    dias_pt = {
+        "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
+        "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
+    }
+    df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
+    df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
+    df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
+    df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
+    df = df[df["OS"].notnull()]
+    df = df.sort_values("Data 1")
+    opcoes = [
+        (
+            f'OS {row.OS} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Bairro"]} | {row["Cliente"]}',
+            int(row.OS)
+        )
+        for _, row in df.iterrows()
+    ]
+    return opcoes, df
+
+def gerar_cartoes(df):
+    cards = []
+    for _, row in df.iterrows():
+        servico = row.get("Serviço", "")
+        bairro = row.get("Bairro", "")
+        data = row.get("Data 1 Formatada", "")
+        dia_semana = row.get("Dia da Semana", "")
+        horas_servico = row.get("Horas de serviço", "")
+        hora_entrada = row.get("Hora de entrada", "")
+        referencia = row.get("Ponto de Referencia", "")
+        os_num = row.get("OS", "")
+        mensagem = (
+            f"Aceito a OS{os_num} do atendimento de {servico} no bairro {bairro}, "
+            f"para o dia {dia_semana}, {data}. "
+            f"Horário de entrada: {hora_entrada}"
+        )
+        mensagem_url = urllib.parse.quote(mensagem)
+        celular = "31995265364"
+        whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
+        card_html = f"""
+        <div style="
+            background: #fff;
+            border: 1.5px solid #eee;
+            border-radius: 18px;
+            padding: 24px 22px 16px 22px;
+            margin: 18px;
+            min-width: 300px;
+            max-width: 380px;
+            color: #00008B;
+            font-family: Arial, sans-serif;
+        ">
+            <div style="font-size:1.35em; font-weight:bold; color:#00008B; margin-bottom:2px;">
+                {servico}
+            </div>
+            <div style="font-size:1.10em; color:#00008B; margin-bottom:8px;">
+                <b style="color:#00008B;">Bairro:</b> <span style="color:#00008B;">{bairro}</span>
+            </div>
+            <div style="font-size:1em; color:#00008B;">
+                <b style="color:#00008B;">Data:</b> <span style="color:#00008B;">{data} ({dia_semana})</span><br>
+                <b style="color:#00008B;">Duração do atendimento:</b> <span style="color:#00008B;">{horas_servico}</span><br>
+                <b style="color:#00008B;">Hora de entrada:</b> <span style="color:#00008B;">{hora_entrada}</span><br>
+                <b style="color:#00008B;">Ponto de Referência:</b> <span style="color:#00008B;">{referencia if referencia and referencia != 'nan' else '-'}</span>
+            </div>
+            <a href="{whatsapp_url}" target="_blank">
+                <button style="margin-top:18px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.07em; font-weight:700;cursor:pointer; width:100%;">
+                    Aceitar Atendimento no WhatsApp
+                </button>
+            </a>
+        </div>
+        """
+        cards.append(card_html)
+    if not cards:
+        return "<div style='color:orange;'>Nenhum atendimento selecionado.</div>"
+    grid_html = f"""
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px;">
+        {''.join(cards)}
+    </div>
+    """
+    return grid_html
+
+# --------- TROQUE/INSIRA NO BLOCO DO TAB 4 -----------
 with tabs[3]:
-    SENHA_CORRETA = "vvv"
+    st.header("Cartões WhatsApp (acesso restrito)")
     if "cartoes_autenticado" not in st.session_state:
         st.session_state["cartoes_autenticado"] = False
     if "cartoes_arquivo" not in st.session_state:
@@ -916,102 +1012,6 @@ with tabs[3]:
     if "cartoes_os_list" not in st.session_state:
         st.session_state["cartoes_os_list"] = []
 
-    def formatar_hora(h):
-        try:
-            if pd.isnull(h) or h == "":
-                return ""
-            h_str = str(h).strip()
-            if ":" in h_str and len(h_str) == 8:
-                return h_str[:5]
-            if ":" in h_str and len(h_str) == 5:
-                return h_str
-            return pd.to_datetime(h_str).strftime("%H:%M")
-        except:
-            return str(h)
-
-    def listar_atendimentos_cartoes(arquivo):
-        df = pd.read_excel(arquivo, sheet_name="Clientes")
-        df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-        dias_pt = {
-            "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
-            "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
-        }
-        df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
-        df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
-        df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
-        df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
-        df = df[df["OS"].notnull()]
-        df = df.sort_values("Data 1")
-        opcoes = [
-            (
-                f'OS {row.OS} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Bairro"]} | {row["Cliente"]}',
-                int(row.OS)
-            )
-            for _, row in df.iterrows()
-        ]
-        return opcoes, df
-
-    def gerar_cartoes(df):
-        cards = []
-        for _, row in df.iterrows():
-            servico = row.get("Serviço", "")
-            bairro = row.get("Bairro", "")
-            data = row.get("Data 1 Formatada", "")
-            dia_semana = row.get("Dia da Semana", "")
-            horas_servico = row.get("Horas de serviço", "")
-            hora_entrada = row.get("Hora de entrada", "")
-            referencia = row.get("Ponto de Referencia", "")
-            os_num = row.get("OS", "")
-            mensagem = (
-                f"Aceito a OS{os_num} do atendimento de {servico} no bairro {bairro}, "
-                f"para o dia {dia_semana}, {data}. "
-                f"Horário de entrada: {hora_entrada}"
-            )
-            mensagem_url = urllib.parse.quote(mensagem)
-            celular = "31995265364"
-            whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
-            card_html = f"""
-            <div style="
-                background: #fff;
-                border: 1.5px solid #eee;
-                border-radius: 18px;
-                padding: 24px 22px 16px 22px;
-                margin: 18px;
-                min-width: 300px;
-                max-width: 380px;
-                color: #00008B;
-                font-family: Arial, sans-serif;
-            ">
-                <div style="font-size:1.35em; font-weight:bold; color:#00008B; margin-bottom:2px;">
-                    {servico}
-                </div>
-                <div style="font-size:1.10em; color:#00008B; margin-bottom:8px;">
-                    <b style="color:#00008B;">Bairro:</b> <span style="color:#00008B;">{bairro}</span>
-                </div>
-                <div style="font-size:1em; color:#00008B;">
-                    <b style="color:#00008B;">Data:</b> <span style="color:#00008B;">{data} ({dia_semana})</span><br>
-                    <b style="color:#00008B;">Duração do atendimento:</b> <span style="color:#00008B;">{horas_servico}</span><br>
-                    <b style="color:#00008B;">Hora de entrada:</b> <span style="color:#00008B;">{hora_entrada}</span><br>
-                    <b style="color:#00008B;">Ponto de Referência:</b> <span style="color:#00008B;">{referencia if referencia and referencia != 'nan' else '-'}</span>
-                </div>
-                <a href="{whatsapp_url}" target="_blank">
-                    <button style="margin-top:18px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.07em; font-weight:700;cursor:pointer; width:100%;">
-                        Aceitar Atendimento no WhatsApp
-                    </button>
-                </a>
-            </div>
-            """
-            cards.append(card_html)
-        if not cards:
-            return "<div style='color:orange;'>Nenhum atendimento selecionado.</div>"
-        grid_html = f"""
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px;">
-            {''.join(cards)}
-        </div>
-        """
-        return grid_html
-
-    st.header("Cartões WhatsApp (acesso restrito)")
     if not st.session_state["cartoes_autenticado"]:
         senha = st.text_input("Digite a senha de administrador", type="password", key="senha_cartoes")
         if st.button("Entrar", key="btn_senha_cartoes"):
@@ -1037,9 +1037,15 @@ with tabs[3]:
                 key="cartoes_os_select"
             )
             st.session_state["cartoes_os_list"] = os_selecionados
+
             if st.button("Gerar cartões dos atendimentos selecionados", key="btn_gerar_cartoes"):
                 if not os_selecionados:
                     st.warning("Selecione pelo menos um atendimento!")
                 else:
                     df_selected = df_clientes_cartoes[df_clientes_cartoes["OS"].astype(int).isin(os_selecionados)]
-                    st.markdown(gerar_cartoes(df_selected), unsafe_allow_html=True)
+                    st.session_state["cartoes_html"] = gerar_cartoes(df_selected)
+
+            # Exibe os cartões gerados sempre que existir HTML salvo no session_state
+            if "cartoes_html" in st.session_state and st.session_state["cartoes_html"]:
+                st.markdown(st.session_state["cartoes_html"], unsafe_allow_html=True)
+
