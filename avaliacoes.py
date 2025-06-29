@@ -1019,7 +1019,7 @@ with tabs[3]:
                             <div style="font-size:0.95em; color:#00008B;">
                                 <b>Data:</b> <span>{data}</span><br>
                                 <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
-                                <b>Hora de entrada:</b> <span>{hora_servico}</span><br>
+                                <b>Horas de serviço:</b> <span>{hora_servico}</span><br>
                                 <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
                             </div>
                             <a href="{whatsapp_url}" target="_blank">
