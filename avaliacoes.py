@@ -755,8 +755,18 @@ tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", 
 
 
 with tabs[1]:
-
-    
+    if "senha_upload_ok" not in st.session_state:
+        st.session_state["senha_upload_ok"] = False
+    if not st.session_state["senha_upload_ok"]:
+        senha_upload = st.text_input("Senha de acesso (Upload)", type="password", key="senha_upload")
+        if st.button("Entrar", key="btn_senha_upload"):
+            if senha_upload == "vvv":
+                st.session_state["senha_upload_ok"] = True
+                st.experimental_rerun()
+            else:
+                st.error("Senha incorreta.")
+        st.stop()
+    # ---- Seu código da aba Upload aqui ----
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
         with st.spinner("Processando... Isso pode levar alguns segundos."):
@@ -775,16 +785,27 @@ with tabs[1]:
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             key="download_excel_consolidado"
                         )
-    
                         import shutil
                         shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
                     else:
                         st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
                 except Exception as e:
-                    st.error(f"Erro no processamento: {e}")    
+                    st.error(f"Erro no processamento: {e}")
 
+# --------- TAB 2: MATRIZ DE ROTAS (COM SENHA) ---------
 with tabs[2]:
-    
+    if "senha_rotas_ok" not in st.session_state:
+        st.session_state["senha_rotas_ok"] = False
+    if not st.session_state["senha_rotas_ok"]:
+        senha_rotas = st.text_input("Senha de acesso (Matriz de Rotas)", type="password", key="senha_rotas")
+        if st.button("Entrar", key="btn_senha_rotas"):
+            if senha_rotas == "vvv":
+                st.session_state["senha_rotas_ok"] = True
+                st.experimental_rerun()
+            else:
+                st.error("Senha incorreta.")
+        st.stop()
+    # ---- Seu código da aba Matriz de Rotas aqui ----
     if os.path.exists(ROTAS_FILE):
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
@@ -816,11 +837,20 @@ with tabs[2]:
     else:
         st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
 
-
-
+# --------- TAB 3: ACEITES (COM SENHA) ---------
 with tabs[3]:
-
-
+    if "senha_aceites_ok" not in st.session_state:
+        st.session_state["senha_aceites_ok"] = False
+    if not st.session_state["senha_aceites_ok"]:
+        senha_aceites = st.text_input("Senha de acesso (Aceites)", type="password", key="senha_aceites")
+        if st.button("Entrar", key="btn_senha_aceites"):
+            if senha_aceites == "vvv":
+                st.session_state["senha_aceites_ok"] = True
+                st.experimental_rerun()
+            else:
+                st.error("Senha incorreta.")
+        st.stop()
+    # ---- Seu código da aba Aceites aqui ----
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
@@ -834,9 +864,6 @@ with tabs[3]:
             ],
             how="left", on="OS"
         )
-
-        
-        # ---------- BLOCO DE INDICADOR: Quantos aceites SIM por OS ----------
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data do atendimento", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
         df_rotas_sel = df_rotas.copy()
@@ -847,21 +874,14 @@ with tabs[3]:
             df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
         os_do_dia = df_rotas_sel["OS"].astype(str).unique()
         aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
-        
-        # Normaliza colunas OS
         df_rotas_sel["OS"] = df_rotas_sel["OS"].astype(str).str.strip()
         aceites_do_dia["OS"] = aceites_do_dia["OS"].astype(str).str.strip()
-        
-        # Só aceita SIM
         aceites_sim = aceites_do_dia[aceites_do_dia["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
         qtd_aceites_por_os = aceites_sim.groupby("OS").size()
-        
         df_qtd_aceites = pd.DataFrame({'OS': os_do_dia})
         df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
         df_qtd_aceites = df_qtd_aceites.sort_values("OS")
-        
         st.markdown("### Indicador: Quantidade de Aceites por OS")
-        
         custom_css = """
         <style>
         th, td {
@@ -873,11 +893,6 @@ with tabs[3]:
         """
         st.markdown(custom_css, unsafe_allow_html=True)
         st.markdown(df_qtd_aceites.to_html(index=False), unsafe_allow_html=True)
-
-        # ---------- FIM DO BLOCO DE INDICADOR ----------
-
-
-        # Filtros detalhados
         clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_aceite")
         profissionais = df_aceites_completo["Profissional"].dropna().unique() if "Profissional" in df_aceites_completo else []
@@ -912,7 +927,6 @@ with tabs[3]:
         )
     else:
         st.info("Nenhum aceite registrado ainda.")
-
 
 
 import json
