@@ -66,7 +66,7 @@ def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
         "Aceitou": "Sim" if aceitou else "Não",
         "Data do Aceite": data,
         "Dia da Semana": dia_semana,
-        "Horário do Aceite": horario
+        "Horário do Aceite": horario,
         "Origem": origem if origem else ""
     }
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
