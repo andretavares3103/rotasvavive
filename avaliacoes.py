@@ -962,7 +962,7 @@ with tabs[0]:
                 datas_selecionadas = st.multiselect(
                     "Filtrar atendimentos por Data",
                     options=datas_formatadas,
-                    default=datas_formatadas,
+                    default=[],
                     key="datas_multiselect"
                 )
                 if datas_selecionadas:
