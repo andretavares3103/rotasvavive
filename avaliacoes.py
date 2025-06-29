@@ -1013,13 +1013,8 @@ with tabs[0]:
                     hora_entrada = row.get("Hora de entrada", "")
                     hora_servico = row.get("Horas de serviço", "")
                     referencia = row.get("Ponto de Referencia", "")
-                    mensagem = (
-                        f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
-                        f"para o dia {data}. Horário de entrada: {hora_entrada}"
-                    )
-                    mensagem_url = urllib.parse.quote(mensagem)
-                    celular = "31995265364"
-                    whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
+                    os_id = int(row["OS"])
+                    
                     st.markdown(f"""
                         <div style="
                             background: #fff;
@@ -1044,12 +1039,31 @@ with tabs[0]:
                                 <b>Horas de serviço:</b> <span>{hora_servico}</span><br>
                                 <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
                             </div>
-                            <a href="{whatsapp_url}" target="_blank">
-                                <button style="margin-top:12px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.02em; font-weight:700;cursor:pointer; width:100%;">
-                                    Aceitar Atendimento no WhatsApp
-                                </button>
-                            </a>
                         </div>
                     """, unsafe_allow_html=True)
+                    
+                    expander_style = """
+                    <style>
+                    /* Aplica fundo verde e texto branco ao expander do Streamlit */
+                    div[role="button"][aria-expanded] {
+                        background: #25D366 !important;
+                        color: #fff !important;
+                        border-radius: 10px !important;
+                        font-weight: bold;
+                        font-size: 1.08em;
+                    }
+                    </style>
+                    """
+                    st.markdown(expander_style, unsafe_allow_html=True)
+                    
+                    with st.expander("Tem disponibilidade? Clique aqui para aceitar este atendimento!"):
+                        profissional = st.text_input(f"Nome da Profissional", key=f"prof_nome_{os_id}")
+                        telefone = st.text_input(f"Telefone para contato", key=f"prof_tel_{os_id}")
+                        resposta = st.empty()
+                        if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
+                            salvar_aceite(os_id, profissional, telefone, True, origem="portal")
+                            resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+
+
         else:
             st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
