@@ -132,5 +132,3 @@ with tabs[3]:
                     </a>
                 </div>
                 """, unsafe_allow_html=True)
-        else:
-            st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
