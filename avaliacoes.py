@@ -67,6 +67,7 @@ def salvar_aceite(os_id, profissional, telefone, aceitou):
         "Data do Aceite": data,
         "Dia da Semana": dia_semana,
         "Horário do Aceite": horario
+        "Origem": origem if origem else ""
     }
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
     df.to_excel(ACEITES_FILE, index=False)
