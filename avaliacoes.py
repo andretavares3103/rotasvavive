@@ -753,7 +753,7 @@ def pipeline(file_path, output_dir):
 
 tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
 
-with tabs[0]:
+with tabs[1]:
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
         with st.spinner("Processando... Isso pode levar alguns segundos."):
@@ -780,7 +780,7 @@ with tabs[0]:
                 except Exception as e:
                     st.error(f"Erro no processamento: {e}")
 
-with tabs[1]:
+with tabs[2]:
     if os.path.exists(ROTAS_FILE):
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
@@ -812,7 +812,7 @@ with tabs[1]:
     else:
         st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
 
-with tabs[2]:
+with tabs[3]:
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
@@ -910,7 +910,7 @@ with tabs[2]:
 import json
 import urllib.parse
 
-with tabs[3]:
+with tabs[0]:
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
             <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
