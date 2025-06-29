@@ -753,49 +753,62 @@ def pipeline(file_path, output_dir):
 
 tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
 
+
 with tabs[1]:
+if "senha_upload_ok" not in st.session_state:
+    st.session_state["senha_upload_ok"] = False
 
-    with tabs[1]:
-    if "senha_upload_ok" not in st.session_state:
-        st.session_state["senha_upload_ok"] = False
+if not st.session_state["senha_upload_ok"]:
+    senha_upload = st.text_input("Digite a senha de acesso para Upload:", type="password", key="senha_upload")
+    if st.button("Entrar", key="btn_senha_upload"):
+        if senha_upload == "vvv":
+            st.session_state["senha_upload_ok"] = True
+        else:
+            st.error("Senha incorreta.")
+    st.stop()
 
-    if not st.session_state["senha_upload_ok"]:
-        senha_upload = st.text_input("Digite a senha de acesso para Upload:", type="password", key="senha_upload")
-        if st.button("Entrar", key="btn_senha_upload"):
-            if senha_upload == "SENHA_UPLOAD":
-                st.session_state["senha_upload_ok"] = True
-            else:
-                st.error("Senha incorreta.")
-        st.stop()
 
-    
-    uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
-    if uploaded_file:
-        with st.spinner("Processando... Isso pode levar alguns segundos."):
-            with tempfile.TemporaryDirectory() as tempdir:
-                temp_path = os.path.join(tempdir, uploaded_file.name)
-                with open(temp_path, "wb") as f:
-                    f.write(uploaded_file.read())
-                try:
-                    excel_path = pipeline(temp_path, tempdir)
-                    if os.path.exists(excel_path):
-                        st.success("Processamento finalizado com sucesso!")
-                        st.download_button(
-                            label="📥 Baixar Excel consolidado",
-                            data=open(excel_path, "rb").read(),
-                            file_name="rotas_bh_dados_tratados_completos.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key="download_excel_consolidado"
-                        )
+uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
+if uploaded_file:
+    with st.spinner("Processando... Isso pode levar alguns segundos."):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_path = os.path.join(tempdir, uploaded_file.name)
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_file.read())
+            try:
+                excel_path = pipeline(temp_path, tempdir)
+                if os.path.exists(excel_path):
+                    st.success("Processamento finalizado com sucesso!")
+                    st.download_button(
+                        label="📥 Baixar Excel consolidado",
+                        data=open(excel_path, "rb").read(),
+                        file_name="rotas_bh_dados_tratados_completos.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_excel_consolidado"
+                    )
 
-                        import shutil
-                        shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
-                    else:
-                        st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
-                except Exception as e:
-                    st.error(f"Erro no processamento: {e}")
+                    import shutil
+                    shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
+                else:
+                    st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
+            except Exception as e:
+                st.error(f"Erro no processamento: {e}")    
 
 with tabs[2]:
+    if "senha_matriz_ok" not in st.session_state:
+        st.session_state["senha_matriz_ok"] = False
+
+    if not st.session_state["senha_matriz_ok"]:
+        senha_matriz = st.text_input("Digite a senha de acesso para Matriz de Rotas:", type="password", key="senha_matriz")
+        if st.button("Entrar", key="btn_senha_matriz"):
+            if senha_matriz == "vvv":
+                st.session_state["senha_matriz_ok"] = True
+            else:
+                st.error("Senha incorreta.")
+        st.stop()   
+
+
+    
     if os.path.exists(ROTAS_FILE):
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
@@ -828,6 +841,20 @@ with tabs[2]:
         st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
 
 with tabs[3]:
+    if "senha_aceites_ok" not in st.session_state:
+        st.session_state["senha_aceites_ok"] = False
+
+    if not st.session_state["senha_aceites_ok"]:
+        senha_aceites = st.text_input("Digite a senha de acesso para Aceites:", type="password", key="senha_aceites")
+        if st.button("Entrar", key="btn_senha_aceites"):
+            if senha_aceites == "vvv":
+                st.session_state["senha_aceites_ok"] = True
+            else:
+                st.error("Senha incorreta.")
+        st.stop()
+
+
+    
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
