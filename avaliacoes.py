@@ -906,202 +906,202 @@ import pandas as pd
 import urllib
 with tabs[3]:
 
-SENHA_CORRETA = "vvv"
-
-# Variáveis globais para manter último arquivo e OSs selecionados
-arquivo_mem = {"file": None}
-os_visiveis = {"os_list": []}
-
-def formatar_hora(h):
-    try:
-        if pd.isnull(h) or h == "":
-            return ""
-        h_str = str(h).strip()
-        if ":" in h_str and len(h_str) == 8:
-            return h_str[:5]
-        if ":" in h_str and len(h_str) == 5:
-            return h_str
-        return pd.to_datetime(h_str).strftime("%H:%M")
-    except:
-        return str(h)
-
-def listar_atendimentos(arquivo_excel):
-    df = pd.read_excel(arquivo_excel.name, sheet_name="Clientes")
-    df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-    dias_pt = {
-        "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
-        "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
-    }
-    df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
-    df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
-    df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
-    df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
-    df = df[df["OS"].notnull()]
-    df = df.sort_values("Data 1")
-    opcoes = [
-        (
-            f'OS {row.OS} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Bairro"]} | {row["Cliente"]}',
-            int(row.OS)
-        )
-        for _, row in df.iterrows()
-    ]
-    return opcoes, df
-
-def gerar_cartoes_global():
-    # Usa os dados em memória (após seleção via senha)
-    if arquivo_mem["file"] is None or not os_visiveis["os_list"]:
-        return "<div style='color:orange;'>Nenhum atendimento selecionado.</div>"
-    df = pd.read_excel(arquivo_mem["file"].name, sheet_name="Clientes")
-    df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-    dias_pt = {
-        "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
-        "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
-    }
-    df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
-    df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
-    df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
-    df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
-    df = df[df["OS"].notnull()]
-    df = df[df["OS"].astype(int).isin(os_visiveis["os_list"])]
-    df = df.sort_values("Data 1")
-    cards = []
-    for _, row in df.iterrows():
-        servico = row.get("Serviço", "")
-        bairro = row.get("Bairro", "")
-        data = row.get("Data 1 Formatada", "")
-        dia_semana = row.get("Dia da Semana", "")
-        horas_servico = row.get("Horas de serviço", "")
-        hora_entrada = row.get("Hora de entrada", "")
-        referencia = row.get("Ponto de Referencia", "")
-        os = row.get("OS", "")
-        mensagem = (
-            f"Aceito a OS{os} do atendimento de {servico} no bairro {bairro}, "
-            f"para o dia {dia_semana}, {data}. "
-            f"Horário de entrada: {hora_entrada}"
-        )
-        mensagem_url = urllib.parse.quote(mensagem)
-        celular = "31995265364"
-        whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
-
-        card_html = f"""
-        <div style="
-            background: #fff;
-            border: 1.5px solid #eee;
-            border-radius: 18px;
-            padding: 24px 22px 16px 22px;
-            margin: 18px;
-            min-width: 300px;
-            max-width: 380px;
-            color: #00008B;
-            font-family: Arial, sans-serif;
-        ">
-            <div style="font-size:1.35em; font-weight:bold; color:#00008B; margin-bottom:2px;">
-                {servico}
+    SENHA_CORRETA = "vvv"
+    
+    # Variáveis globais para manter último arquivo e OSs selecionados
+    arquivo_mem = {"file": None}
+    os_visiveis = {"os_list": []}
+    
+    def formatar_hora(h):
+        try:
+            if pd.isnull(h) or h == "":
+                return ""
+            h_str = str(h).strip()
+            if ":" in h_str and len(h_str) == 8:
+                return h_str[:5]
+            if ":" in h_str and len(h_str) == 5:
+                return h_str
+            return pd.to_datetime(h_str).strftime("%H:%M")
+        except:
+            return str(h)
+    
+    def listar_atendimentos(arquivo_excel):
+        df = pd.read_excel(arquivo_excel.name, sheet_name="Clientes")
+        df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
+        dias_pt = {
+            "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
+            "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
+        }
+        df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
+        df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
+        df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
+        df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
+        df = df[df["OS"].notnull()]
+        df = df.sort_values("Data 1")
+        opcoes = [
+            (
+                f'OS {row.OS} | {row["Data 1 Formatada"]} | {row["Serviço"]} | {row["Bairro"]} | {row["Cliente"]}',
+                int(row.OS)
+            )
+            for _, row in df.iterrows()
+        ]
+        return opcoes, df
+    
+    def gerar_cartoes_global():
+        # Usa os dados em memória (após seleção via senha)
+        if arquivo_mem["file"] is None or not os_visiveis["os_list"]:
+            return "<div style='color:orange;'>Nenhum atendimento selecionado.</div>"
+        df = pd.read_excel(arquivo_mem["file"].name, sheet_name="Clientes")
+        df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
+        dias_pt = {
+            "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
+            "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
+        }
+        df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
+        df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
+        df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
+        df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
+        df = df[df["OS"].notnull()]
+        df = df[df["OS"].astype(int).isin(os_visiveis["os_list"])]
+        df = df.sort_values("Data 1")
+        cards = []
+        for _, row in df.iterrows():
+            servico = row.get("Serviço", "")
+            bairro = row.get("Bairro", "")
+            data = row.get("Data 1 Formatada", "")
+            dia_semana = row.get("Dia da Semana", "")
+            horas_servico = row.get("Horas de serviço", "")
+            hora_entrada = row.get("Hora de entrada", "")
+            referencia = row.get("Ponto de Referencia", "")
+            os = row.get("OS", "")
+            mensagem = (
+                f"Aceito a OS{os} do atendimento de {servico} no bairro {bairro}, "
+                f"para o dia {dia_semana}, {data}. "
+                f"Horário de entrada: {hora_entrada}"
+            )
+            mensagem_url = urllib.parse.quote(mensagem)
+            celular = "31995265364"
+            whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
+    
+            card_html = f"""
+            <div style="
+                background: #fff;
+                border: 1.5px solid #eee;
+                border-radius: 18px;
+                padding: 24px 22px 16px 22px;
+                margin: 18px;
+                min-width: 300px;
+                max-width: 380px;
+                color: #00008B;
+                font-family: Arial, sans-serif;
+            ">
+                <div style="font-size:1.35em; font-weight:bold; color:#00008B; margin-bottom:2px;">
+                    {servico}
+                </div>
+                <div style="font-size:1.10em; color:#00008B; margin-bottom:8px;">
+                    <b style="color:#00008B;">Bairro:</b> <span style="color:#00008B;">{bairro}</span>
+                </div>
+                <div style="font-size:1em; color:#00008B;">
+                    <b style="color:#00008B;">Data:</b> <span style="color:#00008B;">{data} ({dia_semana})</span><br>
+                    <b style="color:#00008B;">Duração do atendimento:</b> <span style="color:#00008B;">{horas_servico}</span><br>
+                    <b style="color:#00008B;">Hora de entrada:</b> <span style="color:#00008B;">{hora_entrada}</span><br>
+                    <b style="color:#00008B;">Ponto de Referência:</b> <span style="color:#00008B;">{referencia if referencia and referencia != 'nan' else '-'}</span>
+                </div>
+                <a href="{whatsapp_url}" target="_blank">
+                    <button style="margin-top:18px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.07em; font-weight:700;cursor:pointer; width:100%;">
+                        Aceitar Atendimento no WhatsApp
+                    </button>
+                </a>
             </div>
-            <div style="font-size:1.10em; color:#00008B; margin-bottom:8px;">
-                <b style="color:#00008B;">Bairro:</b> <span style="color:#00008B;">{bairro}</span>
-            </div>
-            <div style="font-size:1em; color:#00008B;">
-                <b style="color:#00008B;">Data:</b> <span style="color:#00008B;">{data} ({dia_semana})</span><br>
-                <b style="color:#00008B;">Duração do atendimento:</b> <span style="color:#00008B;">{horas_servico}</span><br>
-                <b style="color:#00008B;">Hora de entrada:</b> <span style="color:#00008B;">{hora_entrada}</span><br>
-                <b style="color:#00008B;">Ponto de Referência:</b> <span style="color:#00008B;">{referencia if referencia and referencia != 'nan' else '-'}</span>
-            </div>
-            <a href="{whatsapp_url}" target="_blank">
-                <button style="margin-top:18px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.07em; font-weight:700;cursor:pointer; width:100%;">
-                    Aceitar Atendimento no WhatsApp
-                </button>
-            </a>
+            """
+            cards.append(card_html)
+        if not cards:
+            return "<div style='color:orange;'>Nenhum atendimento selecionado.</div>"
+        grid_html = f"""
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px;">
+            {''.join(cards)}
         </div>
         """
-        cards.append(card_html)
-    if not cards:
-        return "<div style='color:orange;'>Nenhum atendimento selecionado.</div>"
-    grid_html = f"""
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px;">
-        {''.join(cards)}
-    </div>
-    """
-    return grid_html
-
-with gr.Blocks(css="""
-body, .gradio-container { background: #406040 !important; }
-#cabecalho-vivive { background: #406040 !important; }
-""") as demo:
-    gr.Markdown("""
-    <div id="cabecalho-vivive" style="display: flex; align-items: center; width: 25%; background: #406040; padding: 24px 0 24px 0;">
-        <img src="https://i.imgur.com/gIhC0fC.png" height="78" style="margin-left: 40px; margin-right: 40px;">
-        <span style="font-size: 2rem; font-weight: 800; color: #18d96b; font-family: Arial, sans-serif; letter-spacing: 1px;">
-            VAVIVÊ BH
-        </span>
-    </div>
-    """)
-    gr.Markdown("""
-    <div style="color:#fff; font-size:1.12rem; margin-top:20px; margin-bottom:10px;">
-        Consulte abaixo os atendimentos disponíveis!
-    </div>
-    """)
-
-    with gr.Row():
-        senha = gr.Textbox(label="Digite a senha de administrador", type="password")
-        aviso = gr.Markdown("", visible=False)
-
-    # Elementos da seleção (ocultos inicialmente)
-    arquivo_input = gr.File(label="Faça upload do arquivo Excel com a aba 'Clientes'", visible=False)
-    lista_check = gr.CheckboxGroup(label="Selecione os atendimentos para exibir (OS | Data | Serviço | Bairro)", visible=False)
-    btn_atualizar_lista = gr.Button("Carregar atendimentos para seleção", visible=False)
-    btn_exibir_cards = gr.Button("Exibir atendimentos selecionados", visible=False)
-
-    html_cards = gr.HTML()
-
-    def liberar_upload(senha_digitada):
-        if senha_digitada == SENHA_CORRETA:
-            return (
-                gr.update(visible=False),  # senha
-                gr.update(value="", visible=False),  # aviso
-                gr.update(visible=True),   # arquivo_input
-                gr.update(visible=True),   # lista_check
-                gr.update(visible=True),   # btn_atualizar_lista
-                gr.update(visible=True),   # btn_exibir_cards
-            )
-        else:
-            return (
-                gr.update(visible=True),
-                gr.update(value="Senha incorreta!", visible=True),
-                gr.update(visible=False),
-                gr.update(visible=False),
-                gr.update(visible=False),
-                gr.update(visible=False)
-            )
-
-    senha.submit(
-        liberar_upload,
-        inputs=senha,
-        outputs=[senha, aviso, arquivo_input, lista_check, btn_atualizar_lista, btn_exibir_cards]
-    )
-
-    def atualizar_checkboxes(arquivo):
-        if arquivo is not None:
-            arquivo_mem["file"] = arquivo  # salva o arquivo na sessão
-            opcoes, _ = listar_atendimentos(arquivo)
-            return gr.update(choices=opcoes, value=[])
-        else:
-            return gr.update(choices=[], value=[])
-
-    btn_atualizar_lista.click(atualizar_checkboxes, arquivo_input, lista_check)
-
-    def salvar_visiveis(arquivo, os_marcadas):
-        if arquivo is not None and os_marcadas is not None:
-            arquivo_mem["file"] = arquivo  # Atualiza o arquivo
-            os_visiveis["os_list"] = os_marcadas
-        return gerar_cartoes_global()
-
-    btn_exibir_cards.click(
-        salvar_visiveis,
-        inputs=[arquivo_input, lista_check],
-        outputs=html_cards
-    )
-
-    demo.load(gerar_cartoes_global, outputs=html_cards)
-
-demo.launch()
+        return grid_html
+    
+    with gr.Blocks(css="""
+    body, .gradio-container { background: #406040 !important; }
+    #cabecalho-vivive { background: #406040 !important; }
+    """) as demo:
+        gr.Markdown("""
+        <div id="cabecalho-vivive" style="display: flex; align-items: center; width: 25%; background: #406040; padding: 24px 0 24px 0;">
+            <img src="https://i.imgur.com/gIhC0fC.png" height="78" style="margin-left: 40px; margin-right: 40px;">
+            <span style="font-size: 2rem; font-weight: 800; color: #18d96b; font-family: Arial, sans-serif; letter-spacing: 1px;">
+                VAVIVÊ BH
+            </span>
+        </div>
+        """)
+        gr.Markdown("""
+        <div style="color:#fff; font-size:1.12rem; margin-top:20px; margin-bottom:10px;">
+            Consulte abaixo os atendimentos disponíveis!
+        </div>
+        """)
+    
+        with gr.Row():
+            senha = gr.Textbox(label="Digite a senha de administrador", type="password")
+            aviso = gr.Markdown("", visible=False)
+    
+        # Elementos da seleção (ocultos inicialmente)
+        arquivo_input = gr.File(label="Faça upload do arquivo Excel com a aba 'Clientes'", visible=False)
+        lista_check = gr.CheckboxGroup(label="Selecione os atendimentos para exibir (OS | Data | Serviço | Bairro)", visible=False)
+        btn_atualizar_lista = gr.Button("Carregar atendimentos para seleção", visible=False)
+        btn_exibir_cards = gr.Button("Exibir atendimentos selecionados", visible=False)
+    
+        html_cards = gr.HTML()
+    
+        def liberar_upload(senha_digitada):
+            if senha_digitada == SENHA_CORRETA:
+                return (
+                    gr.update(visible=False),  # senha
+                    gr.update(value="", visible=False),  # aviso
+                    gr.update(visible=True),   # arquivo_input
+                    gr.update(visible=True),   # lista_check
+                    gr.update(visible=True),   # btn_atualizar_lista
+                    gr.update(visible=True),   # btn_exibir_cards
+                )
+            else:
+                return (
+                    gr.update(visible=True),
+                    gr.update(value="Senha incorreta!", visible=True),
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                    gr.update(visible=False)
+                )
+    
+        senha.submit(
+            liberar_upload,
+            inputs=senha,
+            outputs=[senha, aviso, arquivo_input, lista_check, btn_atualizar_lista, btn_exibir_cards]
+        )
+    
+        def atualizar_checkboxes(arquivo):
+            if arquivo is not None:
+                arquivo_mem["file"] = arquivo  # salva o arquivo na sessão
+                opcoes, _ = listar_atendimentos(arquivo)
+                return gr.update(choices=opcoes, value=[])
+            else:
+                return gr.update(choices=[], value=[])
+    
+        btn_atualizar_lista.click(atualizar_checkboxes, arquivo_input, lista_check)
+    
+        def salvar_visiveis(arquivo, os_marcadas):
+            if arquivo is not None and os_marcadas is not None:
+                arquivo_mem["file"] = arquivo  # Atualiza o arquivo
+                os_visiveis["os_list"] = os_marcadas
+            return gerar_cartoes_global()
+    
+        btn_exibir_cards.click(
+            salvar_visiveis,
+            inputs=[arquivo_input, lista_check],
+            outputs=html_cards
+        )
+    
+        demo.load(gerar_cartoes_global, outputs=html_cards)
+    
+    demo.launch()
