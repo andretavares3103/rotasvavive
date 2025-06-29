@@ -907,7 +907,6 @@ with tabs[2]:
 
 
 
-
 import json
 import urllib.parse
 
@@ -1015,4 +1014,19 @@ with tabs[3]:
                             </div>
                             <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
                                 <b style="color:#00008B;">Cliente:</b> <span>{nome_cliente}</span>
-                                <b style="color:#
+                                <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
+                            </div>
+                            <div style="font-size:0.95em; color:#00008B;">
+                                <b>Data:</b> <span>{data}</span><br>
+                                <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
+                                <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
+                            </div>
+                            <a href="{whatsapp_url}" target="_blank">
+                                <button style="margin-top:12px;padding:10px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:1.02em; font-weight:700;cursor:pointer; width:100%;">
+                                    Aceitar Atendimento no WhatsApp
+                                </button>
+                            </a>
+                        </div>
+                    """, unsafe_allow_html=True)
+        else:
+            st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
