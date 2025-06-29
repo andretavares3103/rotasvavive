@@ -7,6 +7,9 @@ from geopy.distance import geodesic
 import tempfile
 import io
 
+PORTAL_EXCEL = "portal_clientes.xlsx"
+PORTAL_OS_LIST = "portal_os_list.json"
+
 st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
 
 ACEITES_FILE = "aceites.xlsx"
