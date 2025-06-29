@@ -955,6 +955,19 @@ with tabs[0]:
                     f.write(uploaded_file.getbuffer())
                 st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
                 df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+
+                # ------- FILTRO POR DATA1 -------
+                datas_disponiveis = sorted(df["Data 1"].dropna().unique())
+                datas_formatadas = [str(pd.to_datetime(d).date()) for d in datas_disponiveis]
+                datas_selecionadas = st.multiselect(
+                    "Filtrar atendimentos por Data",
+                    options=datas_formatadas,
+                    default=datas_formatadas,
+                    key="datas_multiselect"
+                )
+                if datas_selecionadas:
+                    df = df[df["Data 1"].astype(str).apply(lambda d: str(pd.to_datetime(d).date()) in datas_selecionadas)]
+
                 # Monta opções com OS, Cliente, Serviço e Bairro
                 opcoes = [
                     f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
