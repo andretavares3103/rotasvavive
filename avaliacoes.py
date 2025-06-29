@@ -746,7 +746,7 @@ def pipeline(file_path, output_dir):
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
-tabs = st.tabs(["Upload de Arquivo", "Matriz de Rotas", "Aceites", "Cartões WhatsApp"])
+tabs = st.tabs(["Upload de Arquivo", "Matriz de Rotas", "Aceites", "Portal Atendimentos"])
 
 with tabs[0]:
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
