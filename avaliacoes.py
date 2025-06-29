@@ -8,6 +8,10 @@ from geopy.distance import geodesic
 import tempfile
 import io
 
+PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"  # ou o nome correto do seu arquivo de clientes
+PORTAL_OS_LIST = "portal_atendimentos_os_list.json" # ou o nome correto da lista de OS (caso use JSON, por exemplo)
+
+
 st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
 
 ACEITES_FILE = "aceites.xlsx"
