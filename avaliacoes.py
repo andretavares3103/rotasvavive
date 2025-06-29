@@ -988,7 +988,7 @@ with tabs[3]:
                     bairro = row.get("Bairro", "")
                     data = row.get("Data 1", "")
                     hora_entrada = row.get("Hora de entrada", "")
-                    nome_cliente = row.get("Cliente", "")
+                    
                     referencia = row.get("Ponto de Referencia", "")
                     mensagem = (
                         f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
