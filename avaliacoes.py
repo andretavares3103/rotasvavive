@@ -989,7 +989,7 @@ with tabs[3]:
                     bairro = row.get("Bairro", "")
                     data = row.get("Data 1", "")
                     hora_entrada = row.get("Hora de entrada", "")
-        
+                    hora_servico = row.get("Horas de serviço", "")
                     referencia = row.get("Ponto de Referencia", "")
                     mensagem = (
                         f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
@@ -1019,6 +1019,7 @@ with tabs[3]:
                             <div style="font-size:0.95em; color:#00008B;">
                                 <b>Data:</b> <span>{data}</span><br>
                                 <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
+                                <b>Hora de entrada:</b> <span>{hora_servico}</span><br>
                                 <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
                             </div>
                             <a href="{whatsapp_url}" target="_blank">
