@@ -940,60 +940,44 @@ with tabs[0]:
         st.session_state.exibir_admin_portal = True
 
     # ---- BLOCO ADMIN ----
-    # ---- BLOCO ADMIN COMPLETO COM FILTRO DE DATA ----
-if st.session_state.exibir_admin_portal:
-    senha = st.text_input("Digite a senha de administrador", type="password", key="senha_portal_admin")
-    if st.button("Validar senha", key="btn_validar_senha_portal"):
-        if senha == "vvv":
-            st.session_state.admin_autenticado_portal = True
-        else:
-            st.error("Senha incorreta.")
+    if st.session_state.exibir_admin_portal:
+        senha = st.text_input("Digite a senha de administrador", type="password", key="senha_portal_admin")
+        if st.button("Validar senha", key="btn_validar_senha_portal"):
+            if senha == "vvv":
+                st.session_state.admin_autenticado_portal = True
+            else:
+                st.error("Senha incorreta.")
 
-    if st.session_state.admin_autenticado_portal:
-        uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
-        if uploaded_file:
-            with open(PORTAL_EXCEL, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-
-            # Adiciona filtro de Data 1
-            df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-            datas_disponiveis = df["Data 1"].dropna().dt.date.unique()
-            data_admin_sel = st.selectbox(
-                "Filtrar atendimentos por Data",
-                options=["Todos"] + [str(d) for d in datas_disponiveis],
-                key="filtro_data_portal_admin"
-            )
-
-            df_filtro = df.copy()
-            if data_admin_sel != "Todos":
-                df_filtro = df_filtro[df_filtro["Data 1"].dt.date.astype(str) == data_admin_sel]
-
-            # Monta opções com OS, Cliente, Serviço e Bairro
-            opcoes = [
-                f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
-                for _, row in df_filtro.iterrows()
-                if not pd.isnull(row.OS)
-            ]
-            selecionadas = st.multiselect(
-                "Selecione os atendimentos para exibir (OS | Cliente | Serviço | Bairro)",
-                opcoes,
-                key="os_multiselect"
-            )
-            if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
-                # Para salvar apenas a lista de OS selecionadas (extraindo da string)
-                os_ids = [
-                    int(op.split()[1]) for op in selecionadas
-                    if op.startswith("OS ")
+        if st.session_state.admin_autenticado_portal:
+            uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
+            if uploaded_file:
+                with open(PORTAL_EXCEL, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
+                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+                # Monta opções com OS, Cliente, Serviço e Bairro
+                opcoes = [
+                    f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
+                    for _, row in df.iterrows()
+                    if not pd.isnull(row.OS)
                 ]
-                with open(PORTAL_OS_LIST, "w") as f:
-                    json.dump(os_ids, f)
-                st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                st.session_state.exibir_admin_portal = False
-                st.session_state.admin_autenticado_portal = False
-                st.rerun()
-
+                selecionadas = st.multiselect(
+                    "Selecione os atendimentos para exibir (OS | Cliente | Serviço | Bairro)",
+                    opcoes,
+                    key="os_multiselect"
+                )
+                if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
+                    # Para salvar apenas a lista de OS selecionadas (extraindo da string)
+                    os_ids = [
+                        int(op.split()[1]) for op in selecionadas
+                        if op.startswith("OS ")
+                    ]
+                    with open(PORTAL_OS_LIST, "w") as f:
+                        json.dump(os_ids, f)
+                    st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
+                    st.session_state.exibir_admin_portal = False
+                    st.session_state.admin_autenticado_portal = False
+                    st.rerun()
 
     # ---- BLOCO VISUALIZAÇÃO (PÚBLICO) ----
     if not st.session_state.exibir_admin_portal:
