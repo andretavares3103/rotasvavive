@@ -985,10 +985,11 @@ with tabs[3]:
                 st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
                 for _, row in df.iterrows():
                     servico = row.get("Serviço", "")
+                    nome_cliente = row.get("Cliente", "")
                     bairro = row.get("Bairro", "")
                     data = row.get("Data 1", "")
                     hora_entrada = row.get("Hora de entrada", "")
-                    
+        
                     referencia = row.get("Ponto de Referencia", "")
                     mensagem = (
                         f"Aceito o atendimento de {servico} para o cliente {nome_cliente}, no bairro {bairro}, "
@@ -1013,7 +1014,6 @@ with tabs[3]:
                                 {servico}
                             </div>
                             <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
-                                <b style="color:#00008B;">Cliente:</b> <span>{nome_cliente}</span>
                                 <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
                             </div>
                             <div style="font-size:0.95em; color:#00008B;">
