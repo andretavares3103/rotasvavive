@@ -905,6 +905,12 @@ with tabs[2]:
     else:
         st.info("Nenhum aceite registrado ainda.")
 
+
+
+
+import json
+import urllib.parse
+
 with tabs[3]:
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
@@ -916,37 +922,47 @@ with tabs[3]:
         </p>
         """, unsafe_allow_html=True)
 
-    # ----- Botão para liberar o modo admin -----
+    # Controle de sessão
     if "exibir_admin_portal" not in st.session_state:
         st.session_state.exibir_admin_portal = False
     if "admin_autenticado_portal" not in st.session_state:
         st.session_state.admin_autenticado_portal = False
 
+    # Botão para liberar campo da senha
     if st.button("Acesso admin para editar atendimentos do portal"):
         st.session_state.exibir_admin_portal = True
 
+    # ----- CAMPO SENHA E UPLOAD -----
+    if st.session_state.exibir_admin_portal and not st.session_state.admin_autenticado_portal:
+        senha = st.text_input("Digite a senha de administrador para liberar upload", type="password", key="senha_portal")
+        if st.button("Liberar edição", key="btn_liberar_portal"):
+            if senha == "vvv":
+                st.session_state.admin_autenticado_portal = True
+                st.success("Acesso liberado!")
+            else:
+                st.error("Senha incorreta!")
 
-        # Só exibe upload e seleção SE autenticado:
-        if st.session_state.admin_autenticado_portal:
-            uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
-            if uploaded_file:
-                with open(PORTAL_EXCEL, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
-                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-                opcoes = [int(row.OS) for _, row in df.iterrows() if not pd.isnull(row.OS)]
-                selecionadas = st.multiselect("Selecione as OS para exibir no portal", opcoes, key="os_multiselect")
-                if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
-                    with open(PORTAL_OS_LIST, "w") as f:
-                        json.dump(selecionadas, f)
-                    st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                    # Limpa flags de admin (volta modo público)
-                    st.session_state.exibir_admin_portal = False
-                    st.session_state.admin_autenticado_portal = False
-                    st.experimental_rerun()
+    # UPLOAD E ESCOLHA DAS OS SÓ SE AUTENTICADO
+    if st.session_state.get("admin_autenticado_portal", False):
+        uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
+        if uploaded_file:
+            with open(PORTAL_EXCEL, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
+            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+            opcoes = [int(row.OS) for _, row in df.iterrows() if not pd.isnull(row.OS)]
+            selecionadas = st.multiselect("Selecione as OS para exibir no portal", opcoes, key="os_multiselect")
+            if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
+                with open(PORTAL_OS_LIST, "w") as f:
+                    json.dump(selecionadas, f)
+                st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
+                # Limpa flags de admin (volta modo público)
+                st.session_state.exibir_admin_portal = False
+                st.session_state.admin_autenticado_portal = False
+                st.experimental_rerun()
 
-    # ----- BLOCO VISUALIZAÇÃO: TODOS USUÁRIOS -----
-    if not st.session_state.exibir_admin_portal:
+    # VISUALIZAÇÃO PARA TODOS
+    if not st.session_state.exibir_admin_portal and not st.session_state.admin_autenticado_portal:
         if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
             df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
             with open(PORTAL_OS_LIST, "r") as f:
