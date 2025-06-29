@@ -901,17 +901,21 @@ with tabs[2]:
         st.info("Nenhum aceite registrado ainda.")
 
 
-
+import streamlit as st
 import pandas as pd
-import urllib
-with tabs[3]:
+import urllib.parse
 
+st.set_page_config(page_title="Portal de Atendimentos Vavivê BH", layout="wide")
+
+with tabs[3]:
     SENHA_CORRETA = "vvv"
-    
-    # Variáveis globais para manter último arquivo e OSs selecionados
-    arquivo_mem = {"file": None}
-    os_visiveis = {"os_list": []}
-    
+    if "cartoes_autenticado" not in st.session_state:
+        st.session_state["cartoes_autenticado"] = False
+    if "cartoes_arquivo" not in st.session_state:
+        st.session_state["cartoes_arquivo"] = None
+    if "cartoes_os_list" not in st.session_state:
+        st.session_state["cartoes_os_list"] = []
+
     def formatar_hora(h):
         try:
             if pd.isnull(h) or h == "":
@@ -924,9 +928,9 @@ with tabs[3]:
             return pd.to_datetime(h_str).strftime("%H:%M")
         except:
             return str(h)
-    
-    def listar_atendimentos(arquivo_excel):
-        df = pd.read_excel(arquivo_excel.name, sheet_name="Clientes")
+
+    def listar_atendimentos_cartoes(arquivo):
+        df = pd.read_excel(arquivo, sheet_name="Clientes")
         df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
         dias_pt = {
             "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
@@ -946,24 +950,8 @@ with tabs[3]:
             for _, row in df.iterrows()
         ]
         return opcoes, df
-    
-    def gerar_cartoes_global():
-        # Usa os dados em memória (após seleção via senha)
-        if arquivo_mem["file"] is None or not os_visiveis["os_list"]:
-            return "<div style='color:orange;'>Nenhum atendimento selecionado.</div>"
-        df = pd.read_excel(arquivo_mem["file"].name, sheet_name="Clientes")
-        df["Data 1"] = pd.to_datetime(df["Data 1"], errors="coerce")
-        dias_pt = {
-            "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
-            "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
-        }
-        df["Dia da Semana"] = df["Data 1"].dt.day_name().map(dias_pt)
-        df["Data 1 Formatada"] = df["Data 1"].dt.strftime("%d/%m/%Y")
-        df["Horas de serviço"] = df["Horas de serviço"].apply(formatar_hora)
-        df["Hora de entrada"] = df["Hora de entrada"].apply(formatar_hora)
-        df = df[df["OS"].notnull()]
-        df = df[df["OS"].astype(int).isin(os_visiveis["os_list"])]
-        df = df.sort_values("Data 1")
+
+    def gerar_cartoes(df):
         cards = []
         for _, row in df.iterrows():
             servico = row.get("Serviço", "")
@@ -973,16 +961,15 @@ with tabs[3]:
             horas_servico = row.get("Horas de serviço", "")
             hora_entrada = row.get("Hora de entrada", "")
             referencia = row.get("Ponto de Referencia", "")
-            os = row.get("OS", "")
+            os_num = row.get("OS", "")
             mensagem = (
-                f"Aceito a OS{os} do atendimento de {servico} no bairro {bairro}, "
+                f"Aceito a OS{os_num} do atendimento de {servico} no bairro {bairro}, "
                 f"para o dia {dia_semana}, {data}. "
                 f"Horário de entrada: {hora_entrada}"
             )
             mensagem_url = urllib.parse.quote(mensagem)
             celular = "31995265364"
             whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
-    
             card_html = f"""
             <div style="
                 background: #fff;
@@ -1023,85 +1010,36 @@ with tabs[3]:
         </div>
         """
         return grid_html
-    
-    with gr.Blocks(css="""
-    body, .gradio-container { background: #406040 !important; }
-    #cabecalho-vivive { background: #406040 !important; }
-    """) as demo:
-        gr.Markdown("""
-        <div id="cabecalho-vivive" style="display: flex; align-items: center; width: 25%; background: #406040; padding: 24px 0 24px 0;">
-            <img src="https://i.imgur.com/gIhC0fC.png" height="78" style="margin-left: 40px; margin-right: 40px;">
-            <span style="font-size: 2rem; font-weight: 800; color: #18d96b; font-family: Arial, sans-serif; letter-spacing: 1px;">
-                VAVIVÊ BH
-            </span>
-        </div>
-        """)
-        gr.Markdown("""
-        <div style="color:#fff; font-size:1.12rem; margin-top:20px; margin-bottom:10px;">
-            Consulte abaixo os atendimentos disponíveis!
-        </div>
-        """)
-    
-        with gr.Row():
-            senha = gr.Textbox(label="Digite a senha de administrador", type="password")
-            aviso = gr.Markdown("", visible=False)
-    
-        # Elementos da seleção (ocultos inicialmente)
-        arquivo_input = gr.File(label="Faça upload do arquivo Excel com a aba 'Clientes'", visible=False)
-        lista_check = gr.CheckboxGroup(label="Selecione os atendimentos para exibir (OS | Data | Serviço | Bairro)", visible=False)
-        btn_atualizar_lista = gr.Button("Carregar atendimentos para seleção", visible=False)
-        btn_exibir_cards = gr.Button("Exibir atendimentos selecionados", visible=False)
-    
-        html_cards = gr.HTML()
-    
-        def liberar_upload(senha_digitada):
-            if senha_digitada == SENHA_CORRETA:
-                return (
-                    gr.update(visible=False),  # senha
-                    gr.update(value="", visible=False),  # aviso
-                    gr.update(visible=True),   # arquivo_input
-                    gr.update(visible=True),   # lista_check
-                    gr.update(visible=True),   # btn_atualizar_lista
-                    gr.update(visible=True),   # btn_exibir_cards
-                )
+
+    st.header("Cartões WhatsApp (acesso restrito)")
+    if not st.session_state["cartoes_autenticado"]:
+        senha = st.text_input("Digite a senha de administrador", type="password", key="senha_cartoes")
+        if st.button("Entrar", key="btn_senha_cartoes"):
+            if senha == SENHA_CORRETA:
+                st.session_state["cartoes_autenticado"] = True
+                st.success("Acesso liberado!")
             else:
-                return (
-                    gr.update(visible=True),
-                    gr.update(value="Senha incorreta!", visible=True),
-                    gr.update(visible=False),
-                    gr.update(visible=False),
-                    gr.update(visible=False),
-                    gr.update(visible=False)
-                )
-    
-        senha.submit(
-            liberar_upload,
-            inputs=senha,
-            outputs=[senha, aviso, arquivo_input, lista_check, btn_atualizar_lista, btn_exibir_cards]
+                st.error("Senha incorreta!")
+
+    if st.session_state["cartoes_autenticado"]:
+        uploaded_cartoes = st.file_uploader(
+            "Upload do arquivo Excel com a aba 'Clientes' para cartões", 
+            type=["xlsx"], 
+            key="cartoes_file"
         )
-    
-        def atualizar_checkboxes(arquivo):
-            if arquivo is not None:
-                arquivo_mem["file"] = arquivo  # salva o arquivo na sessão
-                opcoes, _ = listar_atendimentos(arquivo)
-                return gr.update(choices=opcoes, value=[])
-            else:
-                return gr.update(choices=[], value=[])
-    
-        btn_atualizar_lista.click(atualizar_checkboxes, arquivo_input, lista_check)
-    
-        def salvar_visiveis(arquivo, os_marcadas):
-            if arquivo is not None and os_marcadas is not None:
-                arquivo_mem["file"] = arquivo  # Atualiza o arquivo
-                os_visiveis["os_list"] = os_marcadas
-            return gerar_cartoes_global()
-    
-        btn_exibir_cards.click(
-            salvar_visiveis,
-            inputs=[arquivo_input, lista_check],
-            outputs=html_cards
-        )
-    
-        demo.load(gerar_cartoes_global, outputs=html_cards)
-    
-    demo.launch()
+        if uploaded_cartoes is not None:
+            st.session_state["cartoes_arquivo"] = uploaded_cartoes
+            opcoes, df_clientes_cartoes = listar_atendimentos_cartoes(uploaded_cartoes)
+            os_selecionados = st.multiselect(
+                "Selecione os atendimentos para gerar cartão WhatsApp:",
+                options=[op[1] for op in opcoes],
+                format_func=lambda x: next(label for label, os_num in opcoes if os_num == x),
+                key="cartoes_os_select"
+            )
+            st.session_state["cartoes_os_list"] = os_selecionados
+            if st.button("Gerar cartões dos atendimentos selecionados", key="btn_gerar_cartoes"):
+                if not os_selecionados:
+                    st.warning("Selecione pelo menos um atendimento!")
+                else:
+                    df_selected = df_clientes_cartoes[df_clientes_cartoes["OS"].astype(int).isin(os_selecionados)]
+                    st.markdown(gerar_cartoes(df_selected), unsafe_allow_html=True)
