@@ -1000,7 +1000,7 @@ with tabs[3]:
                         celular = "31995265364"
                         whatsapp_url = f"https://wa.me/55{celular}?text={mensagem_url}"
     
-                        card_html = f"""
+                        card_html = f""
                         <div style="
                             background: #fff;
                             border: 1.5px solid #eee;
