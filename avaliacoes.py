@@ -950,50 +950,50 @@ with tabs[0]:
         """, unsafe_allow_html=True)
 
 
-        if st.session_state.admin_autenticado_portal:
-            uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
-            if uploaded_file:
-                with open(PORTAL_EXCEL, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
-                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+    if st.session_state.admin_autenticado_portal:
+        uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
+        if uploaded_file:
+            with open(PORTAL_EXCEL, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
+            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
 
-                # ------- FILTRO POR DATA1 -------
-                datas_disponiveis = sorted(df["Data 1"].dropna().unique())
-                datas_formatadas = [str(pd.to_datetime(d).date()) for d in datas_disponiveis]
-                datas_selecionadas = st.multiselect(
-                    "Filtrar atendimentos por Data",
-                    options=datas_formatadas,
-                    default=[],
-                    key="datas_multiselect"
-                )
-                if datas_selecionadas:
-                    df = df[df["Data 1"].astype(str).apply(lambda d: str(pd.to_datetime(d).date()) in datas_selecionadas)]
+            # ------- FILTRO POR DATA1 -------
+            datas_disponiveis = sorted(df["Data 1"].dropna().unique())
+            datas_formatadas = [str(pd.to_datetime(d).date()) for d in datas_disponiveis]
+            datas_selecionadas = st.multiselect(
+                "Filtrar atendimentos por Data",
+                options=datas_formatadas,
+                default=[],
+                key="datas_multiselect"
+            )
+            if datas_selecionadas:
+                df = df[df["Data 1"].astype(str).apply(lambda d: str(pd.to_datetime(d).date()) in datas_selecionadas)]
 
 
-                # Monta opções com OS, Cliente, Serviço e Bairro
-                opcoes = [
-                    f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
-                    for _, row in df.iterrows()
-                    if not pd.isnull(row.OS)
+            # Monta opções com OS, Cliente, Serviço e Bairro
+            opcoes = [
+                f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
+                for _, row in df.iterrows()
+                if not pd.isnull(row.OS)
+            ]
+            selecionadas = st.multiselect(
+                "Selecione os atendimentos para exibir (OS | Cliente | Serviço | Bairro)",
+                opcoes,
+                key="os_multiselect"
+            )
+            if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
+                # Para salvar apenas a lista de OS selecionadas (extraindo da string)
+                os_ids = [
+                    int(op.split()[1]) for op in selecionadas
+                    if op.startswith("OS ")
                 ]
-                selecionadas = st.multiselect(
-                    "Selecione os atendimentos para exibir (OS | Cliente | Serviço | Bairro)",
-                    opcoes,
-                    key="os_multiselect"
-                )
-                if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
-                    # Para salvar apenas a lista de OS selecionadas (extraindo da string)
-                    os_ids = [
-                        int(op.split()[1]) for op in selecionadas
-                        if op.startswith("OS ")
-                    ]
-                    with open(PORTAL_OS_LIST, "w") as f:
-                        json.dump(os_ids, f)
-                    st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                    st.session_state.exibir_admin_portal = False
-                    st.session_state.admin_autenticado_portal = False
-                    st.rerun()
+                with open(PORTAL_OS_LIST, "w") as f:
+                    json.dump(os_ids, f)
+                st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
+                st.session_state.exibir_admin_portal = False
+                st.session_state.admin_autenticado_portal = False
+                st.rerun()
 
     # ---- BLOCO VISUALIZAÇÃO (PÚBLICO) ----
     if not st.session_state.exibir_admin_portal:
