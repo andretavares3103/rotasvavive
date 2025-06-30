@@ -769,7 +769,7 @@ if not st.session_state.admin_autenticado:
     if st.button("Validar senha", key="btn_validar_geral"):
         if senha == "vvv":
             st.session_state.admin_autenticado = True
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Senha incorreta.")
     st.stop()
