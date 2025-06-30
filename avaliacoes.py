@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -753,7 +752,7 @@ def pipeline(file_path, output_dir):
     return final_path
 
 tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
-active_tab = st.session_state.get("tabs", 0)
+
 
 with tabs[1]:
 
@@ -820,16 +819,26 @@ with tabs[2]:
 
 
 with tabs[3]:
-  
-        if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
-            # ... resto do seu código da aba ...
-            pass
-        elif os.path.exists(ACEITES_FILE):
-            # ... etc ...
-            pass
-        else:
-            st.info("Nenhum aceite registrado ainda.")
+    # Controle de senha apenas na aba 3
+    if "senha_aceites_autenticada" not in st.session_state:
+        st.session_state.senha_aceites_autenticada = False
 
+    if not st.session_state.senha_aceites_autenticada:
+        senha = st.text_input("Acesso restrito: digite a senha para visualizar os aceites", type="password", key="senha_tab3")
+        if st.button("Entrar", key="btn_entrar_tab3"):
+            if senha == "vvv":
+                st.session_state.senha_aceites_autenticada = True
+                st.success("Acesso liberado!")
+                st.experimental_rerun()
+            else:
+                st.error("Senha incorreta")
+        st.stop()
+
+    # ...Restante da lógica da aba 3...
+
+
+    # Restante do código da aba dos aceites...
+    # ... (não precisa alterar nada abaixo)
 
 
 
