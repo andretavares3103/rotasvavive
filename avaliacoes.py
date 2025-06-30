@@ -828,12 +828,20 @@ with tabs[3]:
         if st.button("Entrar", key="btn_entrar_tab3"):
             if senha == "vvv":
                 st.session_state.senha_aceites_autenticada = True
-                st.experimental_rerun()  # Aqui pode usar!
+                st.success("Acesso liberado!")
+                st.experimental_rerun()
             else:
                 st.error("Senha incorreta")
-        st.stop()  # Interrompe o restante da aba se não autenticou
-
-    # ...restante do código da aba Aceites...
+    else:
+        # Coloque aqui todo o conteúdo protegido da aba dos aceites
+        if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
+            # ... resto do seu código da aba ...
+            pass
+        elif os.path.exists(ACEITES_FILE):
+            # ... etc ...
+            pass
+        else:
+            st.info("Nenhum aceite registrado ainda.")
 
 
 
