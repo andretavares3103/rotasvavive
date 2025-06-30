@@ -4,7 +4,7 @@ import numpy as np
 import os
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
-import tempfileF
+import tempfile
 import io
 
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"  # ou o nome correto do seu arquivo de clientes
