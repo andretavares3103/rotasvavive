@@ -1230,22 +1230,56 @@ with tabs[4]:
 # Aba "Mensagem Rápida"
 with tabs[5]:
     st.subheader("Gerar Mensagem Rápida WhatsApp")
+    os_id = st.text_input("Código da OS (obrigatório)", max_chars=12)
+    profissional = st.text_input("Nome da Profissional (para registrar aceite)")
+    telefone = st.text_input("Telefone para contato (para registrar aceite)")
     data = st.text_input("Data do Atendimento (ex: 20/06/2025)")
     bairro = st.text_input("Bairro")
     servico = st.text_input("Serviço")
     hora_entrada = st.text_input("Hora de entrada (ex: 08:00)")
     duracao = st.text_input("Duração do atendimento (ex: 2h)")
+
+    # Gera o link
+    app_url = "https://rotasvavive.streamlit.app"  # troque pela sua URL real
+    if os_id.strip():
+        link_aceite = f"{app_url}?aceite={os_id}&origem=mensagem_rapida"
+    else:
+        link_aceite = ""
+
     if st.button("Gerar Mensagem"):
-        msg = (
-            "🚨🚨🚨\n"
-            "     *Oportunidade Relâmpago*\n"
-            "                              🚨🚨🚨\n\n"
-            f"Olá, tudo bem com você?\n\n"
-            f"*Data:* {data}\n"
-            f"*Bairro:* {bairro}\n"
-            f"*Serviço:* {servico}\n"
-            f"*Hora de entrada:* {hora_entrada}\n"
-            f"*Duração do atendimento:* {duracao}\n\n"
-            "Se tiver interesse, por favor, nos avise!"
-        )
-        st.text_area("Mensagem WhatsApp", value=msg, height=200)
+        if not os_id.strip():
+            st.error("Preencha o código da OS!")
+        else:
+            mensagem = (
+                "🚨🚨🚨\n"
+                "     *Oportunidade Relâmpago*\n"
+                "                              🚨🚨🚨\n\n"
+                f"Olá, tudo bem com você?\n\n"
+                f"*Data:* {data}\n"
+                f"*Bairro:* {bairro}\n"
+                f"*Serviço:* {servico}\n"
+                f"*Hora de entrada:* {hora_entrada}\n"
+                f"*Duração do atendimento:* {duracao}\n\n"
+                f"👉 Para aceitar ou recusar, acesse: {link_aceite}\n\n"
+                "Se tiver interesse, por favor, nos avise!"
+            )
+            st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
+    resposta = st.empty()
+
+    # BOTÃO REGISTRAR ACEITE (MANUAL, PARA TESTE OU USO INTERNO)
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Registrar ACEITE SIM (manual)"):
+            if not os_id.strip() or not profissional.strip():
+                resposta.error("Preencha OS e nome da profissional.")
+            else:
+                salvar_aceite(os_id, profissional, telefone, True, origem="mensagem_rapida")
+                resposta.success("✅ Aceite SIM registrado com sucesso (mensagem_rapida).")
+    with col2:
+        if st.button("Registrar ACEITE NÃO (manual)"):
+            if not os_id.strip() or not profissional.strip():
+                resposta.error("Preencha OS e nome da profissional.")
+            else:
+                salvar_aceite(os_id, profissional, telefone, False, origem="mensagem_rapida")
+                resposta.success("❌ Recusa registrada com sucesso (mensagem_rapida).")
