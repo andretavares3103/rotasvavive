@@ -1230,22 +1230,38 @@ with tabs[4]:
 # Aba "Mensagem Rápida"
 with tabs[5]:
     st.subheader("Gerar Mensagem Rápida WhatsApp")
-    os_id = st.text_input("Código da OS (obrigatório)", max_chars=12)
-    data = st.text_input("Data do Atendimento (ex: 20/06/2025)")
-    bairro = st.text_input("Bairro")
-    servico = st.text_input("Serviço")
-    hora_entrada = st.text_input("Hora de entrada (ex: 08:00)")
-    duracao = st.text_input("Duração do atendimento (ex: 2h)")
+    if os.path.exists(ROTAS_FILE):
+        df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
+        os_options = df_rotas["OS"].dropna().astype(str).unique()
+        os_id = st.selectbox("Código da OS (obrigatório)", options=["Selecione..."] + list(os_options))
 
-    app_url = "https://rotasvavive.streamlit.app"  # sua URL real
-    if os_id.strip():
+        if os_id and os_id != "Selecione...":
+            linha_os = df_rotas[df_rotas["OS"].astype(str) == os_id].iloc[0]
+            # Puxa dados automaticamente
+            data = st.text_input("Data do Atendimento", value=str(linha_os["Data 1"].date()) if pd.notnull(linha_os["Data 1"]) else "")
+            bairro = st.text_input("Bairro", value=linha_os["Ponto de Referencia"] if pd.notnull(linha_os["Ponto de Referencia"]) else "")
+            servico = st.text_input("Serviço", value=linha_os["Serviço"] if pd.notnull(linha_os["Serviço"]) else "")
+            hora_entrada = st.text_input("Hora de entrada", value=str(linha_os["Hora de entrada"]) if pd.notnull(linha_os["Hora de entrada"]) else "")
+            duracao = st.text_input("Duração do atendimento", value=str(linha_os["Duração do Serviço"]) if pd.notnull(linha_os["Duração do Serviço"]) else "")
+        else:
+            data = st.text_input("Data do Atendimento")
+            bairro = st.text_input("Bairro")
+            servico = st.text_input("Serviço")
+            hora_entrada = st.text_input("Hora de entrada")
+            duracao = st.text_input("Duração do atendimento")
+    else:
+        st.warning("Arquivo de rotas não encontrado. Faça o upload/processamento primeiro.")
+        st.stop()
+
+    app_url = "https://rotasvavive.streamlit.app"
+    if os_id and os_id != "Selecione...":
         link_aceite = f"{app_url}?aceite={os_id}&origem=mensagem_rapida"
     else:
         link_aceite = ""
 
     if st.button("Gerar Mensagem"):
-        if not os_id.strip():
-            st.error("Preencha o código da OS!")
+        if not os_id or os_id == "Selecione...":
+            st.error("Selecione o código da OS!")
         else:
             mensagem = (
                 "🚨🚨🚨\n"
@@ -1261,3 +1277,4 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
