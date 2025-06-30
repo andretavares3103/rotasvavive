@@ -752,7 +752,12 @@ def pipeline(file_path, output_dir):
     return final_path
 
 tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
+tab_labels = ["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"]
+tabs = st.tabs(tab_labels)
 
+# Você pode salvar a aba ativa assim:
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = 0
 
 with tabs[1]:
 
@@ -819,27 +824,22 @@ with tabs[2]:
 
 
 with tabs[3]:
-    # Controle de autenticação exclusivo da aba Aceites
-    if "aceites_autenticado" not in st.session_state:
-        st.session_state.aceites_autenticado = False
+    if st.session_state.active_tab == 3:  # Só aplica na aba Aceites
+        if "senha_aceites_autenticada" not in st.session_state:
+            st.session_state.senha_aceites_autenticada = False
 
-    if not st.session_state.aceites_autenticado:
-        senha_aceites = st.text_input(
-            "Acesso restrito: digite a senha para visualizar os aceites",
-            type="password",
-            key="senha_aceites_somente"
-        )
-        if st.button("Entrar", key="btn_entrar_aceites"):
-            if senha_aceites == "vvv":
-                st.session_state.aceites_autenticado = True
-                st.success("Acesso liberado!")
-                st.experimental_rerun()
-            else:
-                st.error("Senha incorreta")
-        st.stop()  # Garante que nada abaixo será exibido sem senha
+        if not st.session_state.senha_aceites_autenticada:
+            senha = st.text_input("Acesso restrito: digite a senha para visualizar os aceites", type="password", key="senha_tab3")
+            if st.button("Entrar", key="btn_entrar_tab3"):
+                if senha == "vvv":
+                    st.session_state.senha_aceites_autenticada = True
+                    st.experimental_rerun()
+                else:
+                    st.error("Senha incorreta")
+            st.stop()  # Agora só para a execução da aba 3, não das outras!
 
-    # --- Daqui para baixo, apenas usuários autenticados visualizam ---
-    # TODO: coloque aqui o código da visualização/listagem/download dos aceites
+
+    
     if os.path.exists(ACEITES_FILE):
         df_aceites = pd.read_excel(ACEITES_FILE)
         st.dataframe(df_aceites)
