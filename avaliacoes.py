@@ -819,7 +819,7 @@ with tabs[2]:
 
 
 
-with tabs[3]:
+wwith tabs[3]:
     if "senha_aceites_autenticada" not in st.session_state:
         st.session_state.senha_aceites_autenticada = False
 
@@ -832,8 +832,8 @@ with tabs[3]:
                 st.rerun()
             else:
                 st.error("Senha incorreta")
-        # Instead of st.stop(), use return to just end this tab!
-        return
+        st.stop()  # <-- Use isto para interromper só essa aba!
+
 
 
 
