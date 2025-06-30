@@ -704,8 +704,10 @@ def pipeline(file_path, output_dir):
     df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
     app_url = "https://rotasvavive.streamlit.app/"
     df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
-        lambda row: f"{row['Mensagem Padrão']}\n👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n",
+        lambda row: f"👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n{row['Mensagem Padrão']}",
         axis=1
+)
+
     )
     for i in range(1, 21):
         if f"Classificação da Profissional {i}" not in df_matriz_rotas.columns:
