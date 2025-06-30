@@ -819,7 +819,7 @@ with tabs[2]:
 
 
 
-wwith tabs[3]:
+with tabs[3]:
     if "senha_aceites_autenticada" not in st.session_state:
         st.session_state.senha_aceites_autenticada = False
 
