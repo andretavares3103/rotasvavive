@@ -751,7 +751,7 @@ def pipeline(file_path, output_dir):
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
-tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
+#tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
 tab_labels = ["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"]
 tabs = st.tabs(tab_labels)
 
