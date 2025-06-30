@@ -820,20 +820,19 @@ with tabs[2]:
 
 
 with tabs[3]:
-    # Bloco de senha exclusivo para acessar apenas os aceites
-    if "autenticado_aba_aceites" not in st.session_state:
-        st.session_state.autenticado_aba_aceites = False
+   with tabs[3]:
+    if "senha_aceites_autenticada" not in st.session_state:
+        st.session_state.senha_aceites_autenticada = False
 
-    if not st.session_state.autenticado_aba_aceites:
-        senha_aceite = st.text_input("Acesso restrito: digite a senha para visualizar os aceites", type="password", key="senha_aceite")
-        if st.button("Entrar", key="btn_entrar_aceite"):
-            if senha_aceite == "vvv":
-                st.session_state.autenticado_aba_aceites = True
-                st.success("Acesso liberado! Carregando dados dos aceites...")
+    if not st.session_state.senha_aceites_autenticada:
+        senha = st.text_input("Acesso restrito: digite a senha para visualizar os aceites", type="password")
+        if st.button("Entrar"):
+            if senha == "vvv":
+                st.session_state.senha_aceites_autenticada = True
+                st.success("Acesso liberado!")
                 st.experimental_rerun()
             else:
-                st.error("Senha incorreta. Tente novamente.")
-        # O STOP SÓ BLOQUEIA ESTA ABA:
+                st.error("Senha incorreta")
         st.stop()
 
     # Restante do código da aba dos aceites...
