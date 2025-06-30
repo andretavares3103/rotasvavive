@@ -1227,25 +1227,25 @@ with tabs[4]:
             else:
                 st.info("Faça upload e processamento do arquivo para habilitar a busca.")
     
-    # Aba "Mensagem Rápida"
-    with tabs[5]:
-        st.subheader("Gerar Mensagem Rápida WhatsApp")
-        data = st.text_input("Data do Atendimento (ex: 20/06/2025)")
-        bairro = st.text_input("Bairro")
-        servico = st.text_input("Serviço")
-        hora_entrada = st.text_input("Hora de entrada (ex: 08:00)")
-        duracao = st.text_input("Duração do atendimento (ex: 2h)")
-        if st.button("Gerar Mensagem"):
-            msg = (
-                "🚨🚨🚨\n"
-                "     *Oportunidade Relâmpago*\n"
-                "                              🚨🚨🚨\n\n"
-                f"Olá, tudo bem com você?\n\n"
-                f"*Data:* {data}\n"
-                f"*Bairro:* {bairro}\n"
-                f"*Serviço:* {servico}\n"
-                f"*Hora de entrada:* {hora_entrada}\n"
-                f"*Duração do atendimento:* {duracao}\n\n"
-                "Se tiver interesse, por favor, nos avise!"
-            )
-            st.text_area("Mensagem WhatsApp", value=msg, height=200)
+# Aba "Mensagem Rápida"
+with tabs[5]:
+    st.subheader("Gerar Mensagem Rápida WhatsApp")
+    data = st.text_input("Data do Atendimento (ex: 20/06/2025)")
+    bairro = st.text_input("Bairro")
+    servico = st.text_input("Serviço")
+    hora_entrada = st.text_input("Hora de entrada (ex: 08:00)")
+    duracao = st.text_input("Duração do atendimento (ex: 2h)")
+    if st.button("Gerar Mensagem"):
+        msg = (
+            "🚨🚨🚨\n"
+            "     *Oportunidade Relâmpago*\n"
+            "                              🚨🚨🚨\n\n"
+            f"Olá, tudo bem com você?\n\n"
+            f"*Data:* {data}\n"
+            f"*Bairro:* {bairro}\n"
+            f"*Serviço:* {servico}\n"
+            f"*Hora de entrada:* {hora_entrada}\n"
+            f"*Duração do atendimento:* {duracao}\n\n"
+            "Se tiver interesse, por favor, nos avise!"
+        )
+        st.text_area("Mensagem WhatsApp", value=msg, height=200)
