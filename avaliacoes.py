@@ -819,6 +819,32 @@ with tabs[2]:
 
 
 with tabs[3]:
+    # ⬇️ Bloco de admin/upload para ACEITES começa aqui ⬇️
+    if "exibir_admin_aceites" not in st.session_state:
+        st.session_state.exibir_admin_aceites = False
+    if "admin_autenticado_aceites" not in st.session_state:
+        st.session_state.admin_autenticado_aceites = False
+
+    # Botão para mostrar a área admin de aceites
+    if st.button("Acesso admin para upload/edição dos aceites", key="btn_aceites_admin"):
+        st.session_state.exibir_admin_aceites = True
+
+    if st.session_state.exibir_admin_aceites:
+        senha_aceites = st.text_input("Digite a senha de administrador dos aceites", type="password", key="senha_aceites_admin")
+        if st.button("Validar senha aceites", key="btn_validar_senha_aceites"):
+            if senha_aceites == "vvv":
+                st.session_state.admin_autenticado_aceites = True
+            else:
+                st.error("Senha incorreta.")
+
+        if st.session_state.admin_autenticado_aceites:
+            uploaded_file_aceites = st.file_uploader("Faça upload do arquivo de ACEITES", type=["xlsx"], key="upload_aceites")
+            if uploaded_file_aceites:
+                with open("aceites.xlsx", "wb") as f:
+                    f.write(uploaded_file_aceites.getbuffer())
+                st.success("Arquivo de aceites salvo com sucesso!")
+    # ⬆️ Bloco admin termina aqui ⬆️
+
 
 
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
