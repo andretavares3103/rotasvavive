@@ -760,45 +760,86 @@ import json
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
 PORTAL_OS_LIST = "portal_atendimentos_os_list.json"
 
+# Controle de autenticação global
 if "admin_autenticado" not in st.session_state:
     st.session_state.admin_autenticado = False
 
+# Só mostra cards e campo de senha enquanto não autenticou
 if not st.session_state.admin_autenticado:
-    # Só cria a primeira aba
-    tab = st.tabs(["Portal Atendimentos"])[0]
-    with tab:
-        st.markdown("""
-            <div style='display:flex;align-items:center;gap:16px'>
-                <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
-                <span style='font-size:1.7em;font-weight:700;color:#18d96b;letter-spacing:1px;'>BELO HORIZONTE || PORTAL DE ATENDIMENTOS</span>
-            </div>
-            <p style='color:#666;font-size:1.08em;margin:8px 0 18px 0'>
-                Consulte abaixo os atendimentos disponíveis!
-            </p>
-            """, unsafe_allow_html=True)
-        # Visualização pública dos cards
-        if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-            with open(PORTAL_OS_LIST, "r") as f:
-                os_list = json.load(f)
-            df = df[df["OS"].astype(int).isin(os_list)]
-            if df.empty:
-                st.info("Nenhum atendimento disponível.")
-            else:
-                st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
-                # ... seu bloco dos cards ...
+    st.markdown("""
+        <div style='display:flex;align-items:center;gap:16px'>
+            <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
+            <span style='font-size:1.7em;font-weight:700;color:#18d96b;letter-spacing:1px;'>BELO HORIZONTE || PORTAL DE ATENDIMENTOS</span>
+        </div>
+        <p style='color:#666;font-size:1.08em;margin:8px 0 18px 0'>
+            Consulte abaixo os atendimentos disponíveis!
+        </p>
+    """, unsafe_allow_html=True)
+
+    # ---- BLOCO VISUALIZAÇÃO (PÚBLICO) ----
+    if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
+        import pandas as pd
+        df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+        with open(PORTAL_OS_LIST, "r") as f:
+            os_list = json.load(f)
+        df = df[df["OS"].astype(int).isin(os_list)]
+        if df.empty:
+            st.info("Nenhum atendimento disponível.")
         else:
-            st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
-        
-        # Campo de senha
-        senha = st.text_input("Área restrita. Digite a senha para liberar as demais abas:", type="password")
-        if st.button("Entrar", key="btn_senha_global"):
-            if senha == "vvv":
-                st.session_state.admin_autenticado = True
-                st.rerun()
-            else:
-                st.error("Senha incorreta. Acesso restrito.")
-    st.stop()  # Impede de carregar qualquer código depois (inclusive outras abas)
+            st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
+            for _, row in df.iterrows():
+                servico = row.get("Serviço", "")
+                nome_cliente = row.get("Cliente", "")
+                bairro = row.get("Bairro", "")
+                data = row.get("Data 1", "")
+                hora_entrada = row.get("Hora de entrada", "")
+                hora_servico = row.get("Horas de serviço", "")
+                referencia = row.get("Ponto de Referencia", "")
+                os_id = int(row["OS"])
+
+                st.markdown(f"""
+                    <div style="
+                        background: #fff;
+                        border: 1.5px solid #eee;
+                        border-radius: 18px;
+                        padding: 18px 18px 12px 18px;
+                        margin-bottom: 14px;
+                        min-width: 260px;
+                        max-width: 440px;
+                        color: #00008B;
+                        font-family: Arial, sans-serif;
+                    ">
+                        <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
+                            {servico}
+                        </div>
+                        <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
+                            <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
+                        </div>
+                        <div style="font-size:0.95em; color:#00008B;">
+                            <b>Data:</b> <span>{data}</span><br>
+                            <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
+                            <b>Horas de serviço:</b> <span>{hora_servico}</span><br>
+                            <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                # Aqui pode adicionar o expander com formulário de aceite se quiser
+
+    else:
+        st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
+
+    # ---- CAMPO DE SENHA para liberar as demais abas ----
+    senha = st.text_input("Área restrita. Digite a senha para liberar as demais abas:", type="password")
+    if st.button("Entrar", key="btn_senha_global"):
+        if senha == "vvv":
+            st.session_state.admin_autenticado = True
+            st.experimental_rerun()
+        else:
+            st.error("Senha incorreta. Acesso restrito.")
+
+    # Impede de ver as outras abas
+    st.stop()
+
 
 # Se autenticado, agora sim mostra TODAS as abas normalmente!
 tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
