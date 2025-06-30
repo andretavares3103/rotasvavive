@@ -828,11 +828,12 @@ with tabs[3]:
         if st.button("Entrar", key="btn_entrar_tab3"):
             if senha == "vvv":
                 st.session_state.senha_aceites_autenticada = True
-                st.success("Acesso liberado!")
-                st.rerun()
+                st.experimental_rerun()  # Aqui pode usar!
             else:
                 st.error("Senha incorreta")
-        st.stop()  # <-- Use isto para interromper só essa aba!
+        st.stop()  # Interrompe o restante da aba se não autenticou
+
+    # ...restante do código da aba Aceites...
 
 
 
