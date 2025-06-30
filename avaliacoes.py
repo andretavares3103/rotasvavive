@@ -890,7 +890,7 @@ if not st.session_state.admin_autenticado:
 
 
 # Se autenticado, agora sim mostra TODAS as abas normalmente!
-tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
+with st.tabs(["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites", "Profissionais Próximos", "Mensagem Rápida"]):
 
 with tabs[1]:
 
@@ -1205,3 +1205,47 @@ with tabs[0]:
 
         else:
             st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
+
+with tabs[4]:
+        st.subheader("Buscar Profissionais Próximos")
+        lat = st.number_input("Latitude", value=-19.9, format="%.6f")
+        lon = st.number_input("Longitude", value=-43.9, format="%.6f")
+        n = st.number_input("Qtd. profissionais", min_value=1, value=5, step=1)
+        if st.button("Buscar"):
+            # Usa o df_profissionais já tratado do pipeline
+            if os.path.exists(ROTAS_FILE):
+                df_profissionais = pd.read_excel(ROTAS_FILE, sheet_name="Profissionais")
+                mask_inativo_nome = df_profissionais['Nome Prestador'].astype(str).str.contains('inativo', case=False, na=False)
+                df_profissionais = df_profissionais[~mask_inativo_nome]
+                df_profissionais = df_profissionais.dropna(subset=['Latitude Profissional', 'Longitude Profissional'])
+                input_coords = (lat, lon)
+                df_profissionais['Distância_km'] = df_profissionais.apply(
+                    lambda row: geodesic(input_coords, (row['Latitude Profissional'], row['Longitude Profissional'])).km, axis=1
+                )
+                df_melhores = df_profissionais.sort_values('Distância_km').head(int(n))
+                st.dataframe(df_melhores[['Nome Prestador', 'Celular', 'Qtd Atendimentos', 'Latitude Profissional', 'Longitude Profissional', 'Distância_km']])
+            else:
+                st.info("Faça upload e processamento do arquivo para habilitar a busca.")
+    
+    # Aba "Mensagem Rápida"
+    with tabs[5]:
+        st.subheader("Gerar Mensagem Rápida WhatsApp")
+        data = st.text_input("Data do Atendimento (ex: 20/06/2025)")
+        bairro = st.text_input("Bairro")
+        servico = st.text_input("Serviço")
+        hora_entrada = st.text_input("Hora de entrada (ex: 08:00)")
+        duracao = st.text_input("Duração do atendimento (ex: 2h)")
+        if st.button("Gerar Mensagem"):
+            msg = (
+                "🚨🚨🚨\n"
+                "     *Oportunidade Relâmpago*\n"
+                "                              🚨🚨🚨\n\n"
+                f"Olá, tudo bem com você?\n\n"
+                f"*Data:* {data}\n"
+                f"*Bairro:* {bairro}\n"
+                f"*Serviço:* {servico}\n"
+                f"*Hora de entrada:* {hora_entrada}\n"
+                f"*Duração do atendimento:* {duracao}\n\n"
+                "Se tiver interesse, por favor, nos avise!"
+            )
+            st.text_area("Mensagem WhatsApp", value=msg, height=200)
