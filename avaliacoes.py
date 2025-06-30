@@ -756,9 +756,38 @@ def pipeline(file_path, output_dir):
 import streamlit as st
 import os
 import json
+import pandas as pd
 
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
 PORTAL_OS_LIST = "portal_atendimentos_os_list.json"
+
+# Função para registrar aceite (usada nos cards públicos ANTES da senha)
+def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
+    from datetime import datetime
+    ACEITES_FILE = "aceites.xlsx"
+    agora = datetime.now()
+    data = agora.strftime("%d/%m/%Y")
+    dia_semana = agora.strftime("%A")
+    horario = agora.strftime("%H:%M:%S")
+    if os.path.exists(ACEITES_FILE):
+        df = pd.read_excel(ACEITES_FILE)
+    else:
+        df = pd.DataFrame(columns=[
+            "OS", "Profissional", "Telefone", "Aceitou", 
+            "Data do Aceite", "Dia da Semana", "Horário do Aceite", "Origem"
+        ])
+    nova_linha = {
+        "OS": os_id,
+        "Profissional": profissional,
+        "Telefone": telefone,
+        "Aceitou": "Sim" if aceitou else "Não",
+        "Data do Aceite": data,
+        "Dia da Semana": dia_semana,
+        "Horário do Aceite": horario,
+        "Origem": origem if origem else ""
+    }
+    df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
+    df.to_excel(ACEITES_FILE, index=False)
 
 # Controle de autenticação global
 if "admin_autenticado" not in st.session_state:
@@ -778,7 +807,6 @@ if not st.session_state.admin_autenticado:
 
     # ---- BLOCO VISUALIZAÇÃO (PÚBLICO) ----
     if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
-        import pandas as pd
         df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
         with open(PORTAL_OS_LIST, "r") as f:
             os_list = json.load(f)
@@ -823,8 +851,26 @@ if not st.session_state.admin_autenticado:
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
-                # Aqui pode adicionar o expander com formulário de aceite se quiser
-
+                expander_style = """
+                <style>
+                /* Aplica fundo verde e texto branco ao expander do Streamlit */
+                div[role="button"][aria-expanded] {
+                    background: #25D366 !important;
+                    color: #fff !important;
+                    border-radius: 10px !important;
+                    font-weight: bold;
+                    font-size: 1.08em;
+                }
+                </style>
+                """
+                st.markdown(expander_style, unsafe_allow_html=True)
+                with st.expander("Tem disponibilidade? Clique aqui para aceitar este atendimento!"):
+                    profissional = st.text_input(f"Nome da Profissional", key=f"prof_nome_{os_id}")
+                    telefone = st.text_input(f"Telefone para contato", key=f"prof_tel_{os_id}")
+                    resposta = st.empty()
+                    if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
+                        salvar_aceite(os_id, profissional, telefone, True, origem="portal")
+                        resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
     else:
         st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
 
