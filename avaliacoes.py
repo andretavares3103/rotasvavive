@@ -753,28 +753,10 @@ def pipeline(file_path, output_dir):
 
 tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
 
-if "admin_autenticado" not in st.session_state:
-    st.session_state.admin_autenticado = False
-
-if not st.session_state.admin_autenticado:
-    # Mostra apenas os cards públicos do portal
-    with tabs[0]:
-        st.markdown("### Portal Público de Atendimentos")
-        # (Coloque aqui seus cards públicos, listagem de atendimentos, etc)
-        st.info("Para acessar funções administrativas, faça login abaixo.")
-
-    # Exibe campo de senha abaixo dos cards públicos (pode estar em tabs[0] ou fora das tabs)
-    senha = st.text_input("Digite a senha de administrador para liberar acesso completo:", type="password", key="senha_geral")
-    if st.button("Validar senha", key="btn_validar_geral"):
-        if senha == "vvv":
-            st.session_state.admin_autenticado = True
-            st.rerun()
-        else:
-            st.error("Senha incorreta.")
-    st.stop()
-
 
 with tabs[1]:
+
+    
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
         with st.spinner("Processando... Isso pode levar alguns segundos."):
@@ -793,15 +775,16 @@ with tabs[1]:
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             key="download_excel_consolidado"
                         )
+    
                         import shutil
                         shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
                     else:
                         st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
                 except Exception as e:
-                    st.error(f"Erro no processamento: {e}")
-
+                    st.error(f"Erro no processamento: {e}")    
 
 with tabs[2]:
+    
     if os.path.exists(ROTAS_FILE):
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
@@ -836,6 +819,8 @@ with tabs[2]:
 
 
 with tabs[3]:
+
+
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
@@ -850,6 +835,7 @@ with tabs[3]:
             how="left", on="OS"
         )
 
+        
         # ---------- BLOCO DE INDICADOR: Quantos aceites SIM por OS ----------
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data do atendimento", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
@@ -861,21 +847,21 @@ with tabs[3]:
             df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
         os_do_dia = df_rotas_sel["OS"].astype(str).unique()
         aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
-
+        
         # Normaliza colunas OS
         df_rotas_sel["OS"] = df_rotas_sel["OS"].astype(str).str.strip()
         aceites_do_dia["OS"] = aceites_do_dia["OS"].astype(str).str.strip()
-
+        
         # Só aceita SIM
         aceites_sim = aceites_do_dia[aceites_do_dia["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
         qtd_aceites_por_os = aceites_sim.groupby("OS").size()
-
+        
         df_qtd_aceites = pd.DataFrame({'OS': os_do_dia})
         df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
         df_qtd_aceites = df_qtd_aceites.sort_values("OS")
-
+        
         st.markdown("### Indicador: Quantidade de Aceites por OS")
-
+        
         custom_css = """
         <style>
         th, td {
@@ -889,6 +875,7 @@ with tabs[3]:
         st.markdown(df_qtd_aceites.to_html(index=False), unsafe_allow_html=True)
 
         # ---------- FIM DO BLOCO DE INDICADOR ----------
+
 
         # Filtros detalhados
         clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
@@ -925,3 +912,158 @@ with tabs[3]:
         )
     else:
         st.info("Nenhum aceite registrado ainda.")
+
+
+
+import json
+import urllib.parse
+
+with tabs[0]:
+    st.markdown("""
+        <div style='display:flex;align-items:center;gap:16px'>
+            <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
+            <span style='font-size:1.7em;font-weight:700;color:#18d96b;letter-spacing:1px;'>BELO HORIZONTE || PORTAL DE ATENDIMENTOS</span>
+        </div>
+        <p style='color:#666;font-size:1.08em;margin:8px 0 18px 0'>
+            Consulte abaixo os atendimentos disponíveis!
+        </p>
+        """, unsafe_allow_html=True)
+
+    # Controle de exibição e autenticação admin
+    if "exibir_admin_portal" not in st.session_state:
+        st.session_state.exibir_admin_portal = False
+    if "admin_autenticado_portal" not in st.session_state:
+        st.session_state.admin_autenticado_portal = False
+
+    # Botão para mostrar a área admin
+    if st.button("Acesso admin para editar atendimentos do portal"):
+        st.session_state.exibir_admin_portal = True
+
+    # ---- BLOCO ADMIN ----
+    if st.session_state.exibir_admin_portal:
+        senha = st.text_input("Digite a senha de administrador", type="password", key="senha_portal_admin")
+        if st.button("Validar senha", key="btn_validar_senha_portal"):
+            if senha == "vvv":
+                st.session_state.admin_autenticado_portal = True
+            else:
+                st.error("Senha incorreta.")
+
+        if st.session_state.admin_autenticado_portal:
+            uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
+            if uploaded_file:
+                with open(PORTAL_EXCEL, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
+                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+
+                # ------- FILTRO POR DATA1 -------
+                datas_disponiveis = sorted(df["Data 1"].dropna().unique())
+                datas_formatadas = [str(pd.to_datetime(d).date()) for d in datas_disponiveis]
+                datas_selecionadas = st.multiselect(
+                    "Filtrar atendimentos por Data",
+                    options=datas_formatadas,
+                    default=[],
+                    key="datas_multiselect"
+                )
+                if datas_selecionadas:
+                    df = df[df["Data 1"].astype(str).apply(lambda d: str(pd.to_datetime(d).date()) in datas_selecionadas)]
+
+
+                # Monta opções com OS, Cliente, Serviço e Bairro
+                opcoes = [
+                    f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
+                    for _, row in df.iterrows()
+                    if not pd.isnull(row.OS)
+                ]
+                selecionadas = st.multiselect(
+                    "Selecione os atendimentos para exibir (OS | Cliente | Serviço | Bairro)",
+                    opcoes,
+                    key="os_multiselect"
+                )
+                if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
+                    # Para salvar apenas a lista de OS selecionadas (extraindo da string)
+                    os_ids = [
+                        int(op.split()[1]) for op in selecionadas
+                        if op.startswith("OS ")
+                    ]
+                    with open(PORTAL_OS_LIST, "w") as f:
+                        json.dump(os_ids, f)
+                    st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
+                    st.session_state.exibir_admin_portal = False
+                    st.session_state.admin_autenticado_portal = False
+                    st.rerun()
+
+    # ---- BLOCO VISUALIZAÇÃO (PÚBLICO) ----
+    if not st.session_state.exibir_admin_portal:
+        if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
+            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+            with open(PORTAL_OS_LIST, "r") as f:
+                os_list = json.load(f)
+            # Só exibe OS selecionadas
+            df = df[df["OS"].astype(int).isin(os_list)]
+            if df.empty:
+                st.info("Nenhum atendimento disponível.")
+            else:
+                st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
+                for _, row in df.iterrows():
+                    servico = row.get("Serviço", "")
+                    nome_cliente = row.get("Cliente", "")
+                    bairro = row.get("Bairro", "")
+                    data = row.get("Data 1", "")
+                    hora_entrada = row.get("Hora de entrada", "")
+                    hora_servico = row.get("Horas de serviço", "")
+                    referencia = row.get("Ponto de Referencia", "")
+                    os_id = int(row["OS"])
+                    
+                    st.markdown(f"""
+                        <div style="
+                            background: #fff;
+                            border: 1.5px solid #eee;
+                            border-radius: 18px;
+                            padding: 18px 18px 12px 18px;
+                            margin-bottom: 14px;
+                            min-width: 260px;
+                            max-width: 440px;
+                            color: #00008B;
+                            font-family: Arial, sans-serif;
+                        ">
+                            <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
+                                {servico}
+                            </div>
+                            <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
+                                <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
+                            </div>
+                            <div style="font-size:0.95em; color:#00008B;">
+                                <b>Data:</b> <span>{data}</span><br>
+                                <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
+                                <b>Horas de serviço:</b> <span>{hora_servico}</span><br>
+                                <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    expander_style = """
+                    <style>
+                    /* Aplica fundo verde e texto branco ao expander do Streamlit */
+                    div[role="button"][aria-expanded] {
+                        background: #25D366 !important;
+                        color: #fff !important;
+                        border-radius: 10px !important;
+                        font-weight: bold;
+                        font-size: 1.08em;
+                    }
+                    </style>
+                    """
+                    st.markdown(expander_style, unsafe_allow_html=True)
+                    
+                    with st.expander("Tem disponibilidade? Clique aqui para aceitar este atendimento!"):
+                        profissional = st.text_input(f"Nome da Profissional", key=f"prof_nome_{os_id}")
+                        telefone = st.text_input(f"Telefone para contato", key=f"prof_tel_{os_id}")
+                        resposta = st.empty()
+                        if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
+                            salvar_aceite(os_id, profissional, telefone, True, origem="portal")
+                            resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+
+
+        else:
+            st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
