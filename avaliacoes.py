@@ -795,7 +795,7 @@ if not st.session_state.admin_autenticado:
         if st.button("Entrar", key="btn_senha_global"):
             if senha == "vvv":
                 st.session_state.admin_autenticado = True
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Senha incorreta. Acesso restrito.")
     st.stop()  # Impede de carregar qualquer código depois (inclusive outras abas)
