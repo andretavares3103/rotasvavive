@@ -753,7 +753,7 @@ def pipeline(file_path, output_dir):
     return final_path
 
 tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
-
+active_tab = st.session_state.get("tabs", 0)
 
 with tabs[1]:
 
@@ -820,7 +820,6 @@ with tabs[2]:
 
 
 with tabs[3]:
-    # Controle de senha apenas na aba 3
     if "senha_aceites_autenticada" not in st.session_state:
         st.session_state.senha_aceites_autenticada = False
 
@@ -830,16 +829,11 @@ with tabs[3]:
             if senha == "vvv":
                 st.session_state.senha_aceites_autenticada = True
                 st.success("Acesso liberado!")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Senha incorreta")
-        st.stop()
-
-    # ...Restante da lógica da aba 3...
-
-
-    # Restante do código da aba dos aceites...
-    # ... (não precisa alterar nada abaixo)
+        # Instead of st.stop(), use return to just end this tab!
+        return
 
 
 
