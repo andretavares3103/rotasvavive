@@ -820,6 +820,20 @@ with tabs[2]:
 
 
 with tabs[3]:
+    # Bloco de senha exclusivo para acessar os aceites
+    if "admin_autenticado_aceites" not in st.session_state:
+        st.session_state.admin_autenticado_aceites = False
+
+    if not st.session_state.admin_autenticado_aceites:
+        senha_aceite = st.text_input("Acesso restrito: digite a senha para visualizar os aceites", type="password", key="senha_aceite")
+        if st.button("Entrar", key="btn_entrar_aceite"):
+            if senha_aceite == "vvv":
+                st.session_state.admin_autenticado_aceites = True
+                st.success("Acesso liberado! Carregando dados dos aceites...")
+                st.experimental_rerun()
+            else:
+                st.error("Senha incorreta. Tente novamente.")
+        st.stop()
 
 
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
