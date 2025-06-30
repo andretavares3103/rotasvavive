@@ -752,6 +752,24 @@ def pipeline(file_path, output_dir):
     return final_path
 
 tabs = st.tabs([ "Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites"])
+    # Controle de exibição e autenticação admin
+    if "exibir_admin_portal" not in st.session_state:
+        st.session_state.exibir_admin_portal = False
+    if "admin_autenticado_portal" not in st.session_state:
+        st.session_state.admin_autenticado_portal = False
+
+    # Botão para mostrar a área admin
+    if st.button("Acesso admin para editar atendimentos do portal"):
+        st.session_state.exibir_admin_portal = True
+
+    # ---- BLOCO ADMIN ----
+    if st.session_state.exibir_admin_portal:
+        senha = st.text_input("Digite a senha de administrador", type="password", key="senha_portal_admin")
+        if st.button("Validar senha", key="btn_validar_senha_portal"):
+            if senha == "vvv":
+                st.session_state.admin_autenticado_portal = True
+            else:
+                st.error("Senha incorreta.")
 
 
 with tabs[1]:
@@ -929,24 +947,6 @@ with tabs[0]:
         </p>
         """, unsafe_allow_html=True)
 
-    # Controle de exibição e autenticação admin
-    if "exibir_admin_portal" not in st.session_state:
-        st.session_state.exibir_admin_portal = False
-    if "admin_autenticado_portal" not in st.session_state:
-        st.session_state.admin_autenticado_portal = False
-
-    # Botão para mostrar a área admin
-    if st.button("Acesso admin para editar atendimentos do portal"):
-        st.session_state.exibir_admin_portal = True
-
-    # ---- BLOCO ADMIN ----
-    if st.session_state.exibir_admin_portal:
-        senha = st.text_input("Digite a senha de administrador", type="password", key="senha_portal_admin")
-        if st.button("Validar senha", key="btn_validar_senha_portal"):
-            if senha == "vvv":
-                st.session_state.admin_autenticado_portal = True
-            else:
-                st.error("Senha incorreta.")
 
         if st.session_state.admin_autenticado_portal:
             uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
