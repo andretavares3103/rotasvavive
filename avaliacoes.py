@@ -1230,7 +1230,7 @@ with tabs[4]:
 # Aba "Mensagem Rápida"
 with tabs[5]:
     st.subheader("Gerar Mensagem Rápida WhatsApp")
-    os_id = st.text_input("Código da OS Bairro + Serviço (obrigatório)", max_chars=12)
+    os_id = st.text_input("Código da OS* (Bairro + Serviço) (obrigatório)", max_chars=12)
     data = st.text_input("Data do Atendimento (ex: 20/06/2025)")
     bairro = st.text_input("Bairro")
     servico = st.text_input("Serviço")
