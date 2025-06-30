@@ -706,9 +706,9 @@ def pipeline(file_path, output_dir):
     df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
         lambda row: f"👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n{row['Mensagem Padrão']}",
         axis=1
-)
-
     )
+
+    
     for i in range(1, 21):
         if f"Classificação da Profissional {i}" not in df_matriz_rotas.columns:
             df_matriz_rotas[f"Classificação da Profissional {i}"] = pd.NA
