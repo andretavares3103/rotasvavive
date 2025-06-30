@@ -890,7 +890,7 @@ if not st.session_state.admin_autenticado:
 
 
 # Se autenticado, agora sim mostra TODAS as abas normalmente!
-with st.tabs(["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites", "Profissionais Próximos", "Mensagem Rápida"]):
+tabs = st.tabs(["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites", "Profissionais Próximos", "Mensagem Rápida"]):
 
 with tabs[1]:
 
