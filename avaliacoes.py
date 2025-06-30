@@ -4,7 +4,7 @@ import numpy as np
 import os
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
-import tempfile
+import tempfileF
 import io
 
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"  # ou o nome correto do seu arquivo de clientes
@@ -759,9 +759,8 @@ if "admin_autenticado" not in st.session_state:
 if not st.session_state.admin_autenticado:
     # Mostra apenas os cards públicos do portal
     with tabs[0]:
-        # Código para exibir somente os cards públicos (NÃO mostra opções admin, upload, download, etc)
         st.markdown("### Portal Público de Atendimentos")
-        # ... cards e listagem pública ...
+        # (Coloque aqui seus cards públicos, listagem de atendimentos, etc)
         st.info("Para acessar funções administrativas, faça login abaixo.")
 
     # Exibe campo de senha abaixo dos cards públicos (pode estar em tabs[0] ou fora das tabs)
@@ -776,8 +775,6 @@ if not st.session_state.admin_autenticado:
 
 
 with tabs[1]:
-
-    
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
     if uploaded_file:
         with st.spinner("Processando... Isso pode levar alguns segundos."):
@@ -796,16 +793,15 @@ with tabs[1]:
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             key="download_excel_consolidado"
                         )
-    
                         import shutil
                         shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
                     else:
                         st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
                 except Exception as e:
-                    st.error(f"Erro no processamento: {e}")    
+                    st.error(f"Erro no processamento: {e}")
+
 
 with tabs[2]:
-    
     if os.path.exists(ROTAS_FILE):
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
@@ -840,8 +836,6 @@ with tabs[2]:
 
 
 with tabs[3]:
-
-
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
         import io
         from datetime import datetime
@@ -856,7 +850,6 @@ with tabs[3]:
             how="left", on="OS"
         )
 
-        
         # ---------- BLOCO DE INDICADOR: Quantos aceites SIM por OS ----------
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data do atendimento", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
@@ -868,21 +861,21 @@ with tabs[3]:
             df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
         os_do_dia = df_rotas_sel["OS"].astype(str).unique()
         aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
-        
+
         # Normaliza colunas OS
         df_rotas_sel["OS"] = df_rotas_sel["OS"].astype(str).str.strip()
         aceites_do_dia["OS"] = aceites_do_dia["OS"].astype(str).str.strip()
-        
+
         # Só aceita SIM
         aceites_sim = aceites_do_dia[aceites_do_dia["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
         qtd_aceites_por_os = aceites_sim.groupby("OS").size()
-        
+
         df_qtd_aceites = pd.DataFrame({'OS': os_do_dia})
         df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
         df_qtd_aceites = df_qtd_aceites.sort_values("OS")
-        
+
         st.markdown("### Indicador: Quantidade de Aceites por OS")
-        
+
         custom_css = """
         <style>
         th, td {
@@ -896,7 +889,6 @@ with tabs[3]:
         st.markdown(df_qtd_aceites.to_html(index=False), unsafe_allow_html=True)
 
         # ---------- FIM DO BLOCO DE INDICADOR ----------
-
 
         # Filtros detalhados
         clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
@@ -933,78 +925,3 @@ with tabs[3]:
         )
     else:
         st.info("Nenhum aceite registrado ainda.")
-
-
-
-import json
-import urllib.parse
-
-with tabs[0]:
-    st.markdown("""
-        <div style='display:flex;align-items:center;gap:16px'>
-            <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
-            <span style='font-size:1.7em;font-weight:700;color:#18d96b;letter-spacing:1px;'>
-                BELO HORIZONTE || PORTAL DE ATENDIMENTOS
-            </span>
-        </div>
-        <p style='color:#666;font-size:1.08em;margin:8px 0 18px 0'>
-            Consulte abaixo os atendimentos disponíveis!
-        </p>
-    """, unsafe_allow_html=True)
-
-    # VISUALIZAÇÃO PÚBLICA (antes da senha):
-    if not st.session_state.admin_autenticado:
-        # Mostra apenas os cards públicos
-        if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-            with open(PORTAL_OS_LIST, "r") as f:
-                os_list = json.load(f)
-            df = df[df["OS"].astype(int).isin(os_list)]
-            if df.empty:
-                st.info("Nenhum atendimento disponível.")
-            else:
-                st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
-                # ...Cards por atendimento...
-        else:
-            st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
-
-    # ÁREA ADMINISTRATIVA (depois da senha):
-    else:
-        # Agora mostra tudo, inclusive upload, filtro, seleção, etc!
-        # Mesmo bloco que você já tem para área admin:
-        if "exibir_admin_portal" not in st.session_state:
-            st.session_state.exibir_admin_portal = False
-
-        if st.button("Acesso admin para editar atendimentos do portal"):
-            st.session_state.exibir_admin_portal = True
-
-        if st.session_state.exibir_admin_portal:
-            senha = st.text_input("Digite a senha de administrador", type="password", key="senha_portal_admin")
-            if st.button("Validar senha", key="btn_validar_senha_portal"):
-                if senha == "vvv":
-                    st.session_state.admin_autenticado_portal = True
-                else:
-                    st.error("Senha incorreta.")
-
-            if st.session_state.get("admin_autenticado_portal"):
-                uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
-                if uploaded_file:
-                    with open(PORTAL_EXCEL, "wb") as f:
-                        f.write(uploaded_file.getbuffer())
-                    st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
-                    df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-                    # ...FILTRO, SELEÇÃO, etc...
-
-        # E o restante dos cards, igual ao bloco público acima
-        if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-            with open(PORTAL_OS_LIST, "r") as f:
-                os_list = json.load(f)
-            df = df[df["OS"].astype(int).isin(os_list)]
-            if df.empty:
-                st.info("Nenhum atendimento disponível.")
-            else:
-                st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
-                # ...Cards por atendimento...
-        else:
-            st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
