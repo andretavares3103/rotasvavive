@@ -965,6 +965,10 @@ with tabs[3]:
 
         df_aceites = pd.read_excel(ACEITES_FILE)
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
+
+        df_aceites["OS"] = df_aceites["OS"].astype(str).str.strip()
+        df_rotas["OS"] = df_rotas["OS"].astype(str).str.strip()
+
         df_aceites_completo = pd.merge(
             df_aceites, df_rotas[
                 ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
