@@ -1066,6 +1066,10 @@ with tabs[3]:
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_aceite")
         profissionais = df_aceites_completo["Profissional"].dropna().unique() if "Profissional" in df_aceites_completo else []
         profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + list(profissionais), key="prof_aceite")
+        # Gera lista de OS válidas
+        os_validos = df_aceites_completo["OS"].dropna().astype(str).unique()
+        os_sel = st.selectbox("Filtrar por OS", options=["Todos"] + list(os_validos), key="os_aceite")
+
         df_aceites_filt = df_aceites_completo.copy()
         if data_sel != "Todos":
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Data 1"].dt.date.astype(str) == data_sel]
@@ -1073,6 +1077,9 @@ with tabs[3]:
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Nome Cliente"] == cliente_sel]
         if profissional_sel != "Todos" and "Profissional" in df_aceites_filt:
             df_aceites_filt = df_aceites_filt[df_aceites_filt["Profissional"] == profissional_sel]
+        if os_sel != "Todos":
+            df_aceites_filt = df_aceites_filt[df_aceites_filt["OS"].astype(str) == os_sel]
+
         st.dataframe(df_aceites_filt, use_container_width=True)
         output = io.BytesIO()
         df_aceites_filt.to_excel(output, index=False)
