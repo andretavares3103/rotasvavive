@@ -18,7 +18,7 @@ st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", la
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
 
-def exibe_formulario_aceite(os_id):
+def exibe_formulario_aceite(os_id, origem=None):
     st.header(f"Validação de Aceite (OS {os_id})")
     profissional = st.text_input("Nome da Profissional")
     telefone = st.text_input("Telefone para contato")
