@@ -762,6 +762,35 @@ import os
 import json
 import pandas as pd
 
+# Tente configurar o locale (pode ser ignorado se não funcionar)
+try:
+    locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
+except:
+    pass
+
+def formatar_data_portugues(data):
+    dias_pt = {
+        "Monday": "segunda-feira",
+        "Tuesday": "terça-feira",
+        "Wednesday": "quarta-feira",
+        "Thursday": "quinta-feira",
+        "Friday": "sexta-feira",
+        "Saturday": "sábado",
+        "Sunday": "domingo"
+    }
+    if pd.isnull(data) or data == "":
+        return ""
+    try:
+        dt = pd.to_datetime(data, dayfirst=True, errors='coerce')
+        if pd.isnull(dt):
+            return str(data)
+        dia_semana_en = dt.strftime("%A")
+        dia_semana_pt = dias_pt.get(dia_semana_en, dia_semana_en)
+        return f"{dia_semana_pt}, {dt.strftime('%d/%m/%Y')}"
+    except Exception:
+        return str(data)
+
+
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
 PORTAL_OS_LIST = "portal_atendimentos_os_list.json"
 
@@ -1072,33 +1101,7 @@ with tabs[3]:
 
 import json
 import urllib.parse
-# Tente configurar o locale (pode ser ignorado se não funcionar)
-try:
-    locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
-except:
-    pass
 
-def formatar_data_portugues(data):
-    dias_pt = {
-        "Monday": "segunda-feira",
-        "Tuesday": "terça-feira",
-        "Wednesday": "quarta-feira",
-        "Thursday": "quinta-feira",
-        "Friday": "sexta-feira",
-        "Saturday": "sábado",
-        "Sunday": "domingo"
-    }
-    if pd.isnull(data) or data == "":
-        return ""
-    try:
-        dt = pd.to_datetime(data, dayfirst=True, errors='coerce')
-        if pd.isnull(dt):
-            return str(data)
-        dia_semana_en = dt.strftime("%A")
-        dia_semana_pt = dias_pt.get(dia_semana_en, dia_semana_en)
-        return f"{dia_semana_pt}, {dt.strftime('%d/%m/%Y')}"
-    except Exception:
-        return str(data)
 
 with tabs[0]:
     st.markdown("""
