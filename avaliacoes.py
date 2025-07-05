@@ -825,6 +825,7 @@ if not st.session_state.admin_autenticado:
                 nome_cliente = row.get("Cliente", "")
                 bairro = row.get("Bairro", "")
                 data = row.get("Data 1", "")
+                data_pt = formatar_data_portugues(data)
                 hora_entrada = row.get("Hora de entrada", "")
                 hora_servico = row.get("Horas de serviço", "")
                 referencia = row.get("Ponto de Referencia", "")
@@ -849,7 +850,7 @@ if not st.session_state.admin_autenticado:
                             <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
                         </div>
                         <div style="font-size:0.95em; color:#00008B;">
-                            <b>Data:</b> <span>{data}</span><br>
+                            <b>Data:</b> <span>{data_pt}</span><br>
                             <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
                             <b>Horas de serviço:</b> <span>{hora_servico}</span><br>
                             <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
@@ -960,6 +961,15 @@ with tabs[2]:
 
 
 with tabs[3]:
+    if "atualizar_aceites" not in st.session_state:
+        st.session_state.atualizar_aceites = False
+
+    if st.button("🔄 Atualizar aceites"):
+        st.session_state.atualizar_aceites = not st.session_state.atualizar_aceites
+        st.experimental_rerun()
+
+    # ... todo o código atual da aba ...
+
 
 
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
