@@ -814,7 +814,8 @@ if not st.session_state.admin_autenticado:
         df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
         with open(PORTAL_OS_LIST, "r") as f:
             os_list = json.load(f)
-        df = df[df["OS"].astype(int).isin(os_list)]
+        df = df[~df["OS"].isna()]  # remove linhas totalmente vazias de OS
+        df = df[pd.to_numeric(df["OS"], errors="coerce").isin(os_list)]
         if df.empty:
             st.info("Nenhum atendimento disponível.")
         else:
@@ -1144,7 +1145,8 @@ with tabs[0]:
             with open(PORTAL_OS_LIST, "r") as f:
                 os_list = json.load(f)
             # Só exibe OS selecionadas
-            df = df[df["OS"].astype(int).isin(os_list)]
+            df = df[~df["OS"].isna()]  # remove linhas totalmente vazias de OS
+            df = df[pd.to_numeric(df["OS"], errors="coerce").isin(os_list)]
             if df.empty:
                 st.info("Nenhum atendimento disponível.")
             else:
