@@ -995,7 +995,7 @@ with tabs[3]:
 
     if st.button("🔄 Atualizar aceites"):
         st.session_state.atualizar_aceites = not st.session_state.atualizar_aceites
-        st.experimental_rerun()
+        st.rerun()
 
     # ... todo o código atual da aba ...
 
