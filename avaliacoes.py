@@ -768,27 +768,39 @@ try:
 except:
     pass
 
-def formatar_data_portugues(data):
+def formatar_data_portugues_simples(data):
     dias_pt = {
-        "Monday": "segunda-feira",
-        "Tuesday": "terça-feira",
-        "Wednesday": "quarta-feira",
-        "Thursday": "quinta-feira",
-        "Friday": "sexta-feira",
-        "Saturday": "sábado",
-        "Sunday": "domingo"
+        0: "segunda-feira",
+        1: "terça-feira",
+        2: "quarta-feira",
+        3: "quinta-feira",
+        4: "sexta-feira",
+        5: "sábado",
+        6: "domingo"
     }
+    # Aceita tipos string, Timestamp, etc
     if pd.isnull(data) or data == "":
         return ""
     try:
-        dt = pd.to_datetime(data, dayfirst=True, errors='coerce')
-        if pd.isnull(dt):
-            return str(data)
-        dia_semana_en = dt.strftime("%A")
-        dia_semana_pt = dias_pt.get(dia_semana_en, dia_semana_en)
-        return f"{dia_semana_pt}, {dt.strftime('%d/%m/%Y')}"
+        data_str = str(data)
+        if len(data_str) >= 10 and data_str[4] == '-' and data_str[7] == '-':
+            ano = int(data_str[0:4])
+            mes = int(data_str[5:7])
+            dia = int(data_str[8:10])
+            import datetime
+            dt = datetime.date(ano, mes, dia)
+            dia_semana = dias_pt[dt.weekday()]
+            return f"{dia_semana}, {dt.strftime('%d/%m/%Y')}"
+        else:
+            # fallback: tenta o pandas se não for o formato esperado
+            dt = pd.to_datetime(data, errors='coerce')
+            if pd.isnull(dt):
+                return str(data)
+            dia_semana = dias_pt[dt.weekday()]
+            return f"{dia_semana}, {dt.strftime('%d/%m/%Y')}"
     except Exception:
         return str(data)
+
 
 
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
