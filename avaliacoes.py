@@ -868,7 +868,7 @@ if not st.session_state.admin_autenticado:
                 nome_cliente = row.get("Cliente", "")
                 bairro = row.get("Bairro", "")
                 data = row.get("Data 1", "")
-                data_pt = formatar_data_portugues(data)
+                data_pt = formatar_data_portugues_simles(data)
                 hora_entrada = row.get("Hora de entrada", "")
                 hora_servico = row.get("Horas de serviço", "")
                 referencia = row.get("Ponto de Referencia", "")
