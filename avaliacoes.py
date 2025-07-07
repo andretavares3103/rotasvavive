@@ -768,39 +768,27 @@ try:
 except:
     pass
 
-def formatar_data_portugues_simples(data):
+def formatar_data_portugues(data):
     dias_pt = {
-        0: "segunda-feira",
-        1: "terça-feira",
-        2: "quarta-feira",
-        3: "quinta-feira",
-        4: "sexta-feira",
-        5: "sábado",
-        6: "domingo"
+        "Monday": "segunda-feira",
+        "Tuesday": "terça-feira",
+        "Wednesday": "quarta-feira",
+        "Thursday": "quinta-feira",
+        "Friday": "sexta-feira",
+        "Saturday": "sábado",
+        "Sunday": "domingo"
     }
-    # Aceita tipos string, Timestamp, etc
     if pd.isnull(data) or data == "":
         return ""
     try:
-        data_str = str(data)
-        if len(data_str) >= 10 and data_str[4] == '-' and data_str[7] == '-':
-            ano = int(data_str[0:4])
-            mes = int(data_str[5:7])
-            dia = int(data_str[8:10])
-            import datetime
-            dt = datetime.date(ano, mes, dia)
-            dia_semana = dias_pt[dt.weekday()]
-            return f"{dia_semana}, {dt.strftime('%d/%m/%Y')}"
-        else:
-            # fallback: tenta o pandas se não for o formato esperado
-            dt = pd.to_datetime(data, errors='coerce')
-            if pd.isnull(dt):
-                return str(data)
-            dia_semana = dias_pt[dt.weekday()]
-            return f"{dia_semana}, {dt.strftime('%d/%m/%Y')}"
+        dt = pd.to_datetime(data, dayfirst=True, errors='coerce')
+        if pd.isnull(dt):
+            return str(data)
+        dia_semana_en = dt.strftime("%A")
+        dia_semana_pt = dias_pt.get(dia_semana_en, dia_semana_en)
+        return f"{dia_semana_pt}, {dt.strftime('%d/%m/%Y')}"
     except Exception:
         return str(data)
-
 
 
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
@@ -853,8 +841,6 @@ if not st.session_state.admin_autenticado:
     # ---- BLOCO VISUALIZAÇÃO (PÚBLICO) ----
     if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
         df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-        df["Data 1"] = pd.to_datetime(df["Data 1"], dayfirst=True, errors="coerce")   # <-- ADICIONE ESTA LINHA AQUI
-
         with open(PORTAL_OS_LIST, "r") as f:
             os_list = json.load(f)
         df = df[~df["OS"].isna()]  # remove linhas totalmente vazias de OS
@@ -868,7 +854,7 @@ if not st.session_state.admin_autenticado:
                 nome_cliente = row.get("Cliente", "")
                 bairro = row.get("Bairro", "")
                 data = row.get("Data 1", "")
-                data_pt = formatar_data_portugues_simles(data)
+                data_pt = formatar_data_portugues(data)
                 hora_entrada = row.get("Hora de entrada", "")
                 hora_servico = row.get("Horas de serviço", "")
                 referencia = row.get("Ponto de Referencia", "")
@@ -1241,7 +1227,7 @@ with tabs[0]:
                                 <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
                             </div>
                             <div style="font-size:0.95em; color:#00008B;">
-                            <b>Data:</b> <span>{data_pt}</span><br>
+                                <b>Data:</b> <span>{data}</span><br>
                                 <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
                                 <b>Horas de serviço:</b> <span>{hora_servico}</span><br>
                                 <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
@@ -1330,5 +1316,4 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
-
 
