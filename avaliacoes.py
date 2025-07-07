@@ -781,7 +781,15 @@ def formatar_data_portugues(data):
     if pd.isnull(data) or data == "":
         return ""
     try:
-        dt = pd.to_datetime(data, dayfirst=True, errors='coerce')
+        s = str(data)
+        if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+            # Trata explicitamente AAAA-MM-DD para não inverter mês/dia
+            ano = s[0:4]
+            mes = s[5:7]
+            dia = s[8:10]
+            dt = pd.Timestamp(year=int(ano), month=int(mes), day=int(dia))
+        else:
+            dt = pd.to_datetime(data, dayfirst=True, errors='coerce')
         if pd.isnull(dt):
             return str(data)
         dia_semana_en = dt.strftime("%A")
@@ -789,6 +797,7 @@ def formatar_data_portugues(data):
         return f"{dia_semana_pt}, {dt.strftime('%d/%m/%Y')}"
     except Exception:
         return str(data)
+
 
 
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
