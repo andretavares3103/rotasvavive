@@ -841,6 +841,8 @@ if not st.session_state.admin_autenticado:
     # ---- BLOCO VISUALIZAÇÃO (PÚBLICO) ----
     if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
         df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+        df["Data 1"] = pd.to_datetime(df["Data 1"], dayfirst=True, errors="coerce")   # <-- ADICIONE ESTA LINHA AQUI
+
         with open(PORTAL_OS_LIST, "r") as f:
             os_list = json.load(f)
         df = df[~df["OS"].isna()]  # remove linhas totalmente vazias de OS
