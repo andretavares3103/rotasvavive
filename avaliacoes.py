@@ -153,7 +153,7 @@ def padronizar_cpf_cnpj(coluna):
     return (
         coluna.astype(str)
         .str.replace(r'\D', '', regex=True)
-        .str.zfill(11)
+        .str.zfill(14)
         .str.strip()
     )
 
