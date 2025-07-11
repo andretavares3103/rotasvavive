@@ -432,6 +432,11 @@ def pipeline(file_path, output_dir):
             df_bloqueio_completo[df_bloqueio_completo["CPF_CNPJ"] == cpf]["ID Prestador"]
             .astype(str).str.strip().tolist()
         )
+
+        if cpf == "32795566000143":
+            st.write("Bloqueados para LACOS DE FAMILIA:", bloqueados)
+
+        
         linha = {
             "OS": os_id,
             "CPF_CNPJ": cpf,
