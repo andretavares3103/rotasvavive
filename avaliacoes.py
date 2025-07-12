@@ -412,6 +412,10 @@ def pipeline(file_path, output_dir):
     df_distancias_alerta.to_pickle('df_distancias_alerta.pkl')
     matriz_resultado_corrigida = []
     preferidas_alocadas_dia = dict()
+
+    debug_lista = []
+
+    
     for _, atendimento in df_atendimentos_futuros_validos.iterrows():
         data_atendimento = atendimento["Data 1"].date()
         if data_atendimento not in preferidas_alocadas_dia:
