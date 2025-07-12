@@ -531,7 +531,7 @@ def pipeline(file_path, output_dir):
             mais_atendeu_ids = df_mais_atendeu[df_mais_atendeu["Qtd Atendimentos Cliente-Prestador"] == mais_atend]["ID Prestador"]
             for id_ in mais_atendeu_ids:
                 id_prof = str(id_)
-                if id_prof in utilizados or id_prof in preferidas_alocadas_dia[data_atendimento]:
+                if id_prof in utilizados or id_prof in preferidas_alocadas_dia[data_atendimento] or id_prof in bloqueados:
                     continue
                 prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_prof]
                 if not prof.empty:
