@@ -711,13 +711,13 @@ def pipeline(file_path, output_dir):
 
 
     if debug_lista:
-    with open("debug_bloqueios.txt", "w") as f:
-        for linha in debug_lista:
-            f.write(linha + "\n")
-    st.download_button(
-        label="Baixar debug de bloqueios",
-        data=open("debug_bloqueios.txt", "rb").read(),
-        file_name="debug_bloqueios.txt"
+        with open("debug_bloqueios.txt", "w") as f:
+            for linha in debug_lista:
+                f.write(linha + "\n")
+        st.download_button(
+            label="Baixar debug de bloqueios",
+            data=open("debug_bloqueios.txt", "rb").read(),
+            file_name="debug_bloqueios.txt"
     )
 
 
