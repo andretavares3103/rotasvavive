@@ -1,4 +1,4 @@
-
+#
 
 import streamlit as st
 import pandas as pd
@@ -923,6 +923,7 @@ if not st.session_state.admin_autenticado:
         # --------------------------------------
 
 
+
         
         if df.empty:
             st.info("Nenhum atendimento disponível.")
@@ -984,7 +985,7 @@ if not st.session_state.admin_autenticado:
                     resposta = st.empty()
                     if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
                         salvar_aceite(os_id, profissional, telefone, True, origem="portal")
-                        resposta.success("✅ OBRIGADO! SEU INTERESSE FOI REGISTRADO E EM BREVE DAREMOS UM RETORNO!")
+                        resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
     else:
         st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
 
@@ -1244,68 +1245,69 @@ with tabs[0]:
             else:
                 st.error("Senha incorreta.")
 
-        if st.session_state.admin_autenticado_portal:
-            # Permite upload OU reutilização do arquivo salvo
-            if "portal_file_buffer" not in st.session_state:
-                st.session_state.portal_file_buffer = None
-        
-            uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
-            use_last_file = False
-        
-            if uploaded_file:
-                # Salva arquivo na sessão e disco
-                st.session_state.portal_file_buffer = uploaded_file.getbuffer()
-                with open(PORTAL_EXCEL, "wb") as f:
-                    f.write(st.session_state.portal_file_buffer)
-                st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
-                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-            elif st.session_state.portal_file_buffer:
-                # Usa o arquivo já carregado na sessão
-                with open(PORTAL_EXCEL, "wb") as f:
-                    f.write(st.session_state.portal_file_buffer)
-                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-            elif os.path.exists(PORTAL_EXCEL):
-                # Usa o arquivo salvo no disco
-                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-            else:
-                df = None
-        
-            if df is not None:
-                # ------- FILTRO POR DATA1 -------
-                datas_disponiveis = sorted(df["Data 1"].dropna().unique())
-                datas_formatadas = [str(pd.to_datetime(d).date()) for d in datas_disponiveis]
-                datas_selecionadas = st.multiselect(
-                    "Filtrar atendimentos por Data",
-                    options=datas_formatadas,
-                    default=[],
-                    key="datas_multiselect"
-                )
-                if datas_selecionadas:
-                    df = df[df["Data 1"].astype(str).apply(lambda d: str(pd.to_datetime(d).date()) in datas_selecionadas)]
-        
-                # Monta opções com OS, Cliente, Serviço e Bairro
-                opcoes = [
-                    f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
-                    for _, row in df.iterrows()
-                    if not pd.isnull(row.OS)
+    if st.session_state.admin_autenticado_portal:
+        # Permite upload OU reutilização do arquivo salvo
+        if "portal_file_buffer" not in st.session_state:
+            st.session_state.portal_file_buffer = None
+    
+        uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
+        use_last_file = False
+    
+        if uploaded_file:
+            # Salva arquivo na sessão e disco
+            st.session_state.portal_file_buffer = uploaded_file.getbuffer()
+            with open(PORTAL_EXCEL, "wb") as f:
+                f.write(st.session_state.portal_file_buffer)
+            st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
+            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+        elif st.session_state.portal_file_buffer:
+            # Usa o arquivo já carregado na sessão
+            with open(PORTAL_EXCEL, "wb") as f:
+                f.write(st.session_state.portal_file_buffer)
+            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+        elif os.path.exists(PORTAL_EXCEL):
+            # Usa o arquivo salvo no disco
+            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+        else:
+            df = None
+    
+        if df is not None:
+            # ------- FILTRO POR DATA1 -------
+            datas_disponiveis = sorted(df["Data 1"].dropna().unique())
+            datas_formatadas = [str(pd.to_datetime(d).date()) for d in datas_disponiveis]
+            datas_selecionadas = st.multiselect(
+                "Filtrar atendimentos por Data",
+                options=datas_formatadas,
+                default=[],
+                key="datas_multiselect"
+            )
+            if datas_selecionadas:
+                df = df[df["Data 1"].astype(str).apply(lambda d: str(pd.to_datetime(d).date()) in datas_selecionadas)]
+    
+            # Monta opções com OS, Cliente, Serviço e Bairro
+            opcoes = [
+                f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
+                for _, row in df.iterrows()
+                if not pd.isnull(row.OS)
+            ]
+            selecionadas = st.multiselect(
+                "Selecione os atendimentos para exibir (OS | Cliente | Serviço | Bairro)",
+                opcoes,
+                key="os_multiselect"
+            )
+            if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
+                # Para salvar apenas a lista de OS selecionadas (extraindo da string)
+                os_ids = [
+                    int(op.split()[1]) for op in selecionadas
+                    if op.startswith("OS ")
                 ]
-                selecionadas = st.multiselect(
-                    "Selecione os atendimentos para exibir (OS | Cliente | Serviço | Bairro)",
-                    opcoes,
-                    key="os_multiselect"
-                )
-                if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
-                    # Para salvar apenas a lista de OS selecionadas (extraindo da string)
-                    os_ids = [
-                        int(op.split()[1]) for op in selecionadas
-                        if op.startswith("OS ")
-                    ]
-                    with open(PORTAL_OS_LIST, "w") as f:
-                        json.dump(os_ids, f)
-                    st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                    st.session_state.exibir_admin_portal = False
-                    st.session_state.admin_autenticado_portal = False
-                    st.rerun()
+                with open(PORTAL_OS_LIST, "w") as f:
+                    json.dump(os_ids, f)
+                st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
+                st.session_state.exibir_admin_portal = False
+                st.session_state.admin_autenticado_portal = False
+                st.rerun()
+
 
     # ---- BLOCO VISUALIZAÇÃO (PÚBLICO) ----
     if not st.session_state.exibir_admin_portal:
@@ -1438,4 +1440,3 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
-
