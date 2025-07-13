@@ -810,6 +810,16 @@ import os
 import pandas as pd
 import streamlit as st
 
+tabs = st.tabs([
+    "Portal Atendimentos", 
+    "Upload de Arquivo", 
+    "Matriz de Rotas", 
+    "Aceites", 
+    "Profissionais Próximos", 
+    "Mensagem Rápida"
+])
+
+
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
 PORTAL_OS_LIST = "portal_atendimentos_os_list.json"
 
@@ -1005,6 +1015,7 @@ with tabs[0]:
 
 
 # Se autenticado, agora sim mostra TODAS as abas normalmente!
+
 tabs = st.tabs(["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites", "Profissionais Próximos", "Mensagem Rápida"])
 
 with tabs[1]:
