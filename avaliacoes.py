@@ -1223,13 +1223,32 @@ with tabs[0]:
                 st.error("Senha incorreta.")
 
         if st.session_state.admin_autenticado_portal:
+            # Permite upload OU reutilização do arquivo salvo
+            if "portal_file_buffer" not in st.session_state:
+                st.session_state.portal_file_buffer = None
+        
             uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
+            use_last_file = False
+        
             if uploaded_file:
+                # Salva arquivo na sessão e disco
+                st.session_state.portal_file_buffer = uploaded_file.getbuffer()
                 with open(PORTAL_EXCEL, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
+                    f.write(st.session_state.portal_file_buffer)
                 st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
                 df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-
+            elif st.session_state.portal_file_buffer:
+                # Usa o arquivo já carregado na sessão
+                with open(PORTAL_EXCEL, "wb") as f:
+                    f.write(st.session_state.portal_file_buffer)
+                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+            elif os.path.exists(PORTAL_EXCEL):
+                # Usa o arquivo salvo no disco
+                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+            else:
+                df = None
+        
+            if df is not None:
                 # ------- FILTRO POR DATA1 -------
                 datas_disponiveis = sorted(df["Data 1"].dropna().unique())
                 datas_formatadas = [str(pd.to_datetime(d).date()) for d in datas_disponiveis]
@@ -1241,8 +1260,7 @@ with tabs[0]:
                 )
                 if datas_selecionadas:
                     df = df[df["Data 1"].astype(str).apply(lambda d: str(pd.to_datetime(d).date()) in datas_selecionadas)]
-
-
+        
                 # Monta opções com OS, Cliente, Serviço e Bairro
                 opcoes = [
                     f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
