@@ -983,33 +983,58 @@ if not st.session_state.admin_autenticado:
 tabs = st.tabs(["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites", "Profissionais Próximos", "Mensagem Rápida"])
 
 with tabs[1]:
+    if "excel_processado" not in st.session_state:
+        st.session_state.excel_processado = False
+    if "nome_arquivo_processado" not in st.session_state:
+        st.session_state.nome_arquivo_processado = None
 
-    
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
-    if uploaded_file:
-        with st.spinner("Processando... Isso pode levar alguns segundos."):
-            with tempfile.TemporaryDirectory() as tempdir:
-                temp_path = os.path.join(tempdir, uploaded_file.name)
-                with open(temp_path, "wb") as f:
-                    f.write(uploaded_file.read())
-                try:
-                    excel_path = pipeline(temp_path, tempdir)
-                    if os.path.exists(excel_path):
-                        st.success("Processamento finalizado com sucesso!")
-                        st.download_button(
-                            label="📥 Baixar Excel consolidado",
-                            data=open(excel_path, "rb").read(),
-                            file_name="rotas_bh_dados_tratados_completos.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key="download_excel_consolidado"
-                        )
+
+    # Só processa se o arquivo mudou ou nunca foi processado
+    if uploaded_file is not None:
+        if (
+            not st.session_state.excel_processado
+            or st.session_state.nome_arquivo_processado != uploaded_file.name
+        ):
+            with st.spinner("Processando... Isso pode levar alguns segundos."):
+                with tempfile.TemporaryDirectory() as tempdir:
+                    temp_path = os.path.join(tempdir, uploaded_file.name)
+                    with open(temp_path, "wb") as f:
+                        f.write(uploaded_file.read())
+                    try:
+                        excel_path = pipeline(temp_path, tempdir)
+                        if os.path.exists(excel_path):
+                            st.success("Processamento finalizado com sucesso!")
+                            st.download_button(
+                                label="📥 Baixar Excel consolidado",
+                                data=open(excel_path, "rb").read(),
+                                file_name="rotas_bh_dados_tratados_completos.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key="download_excel_consolidado"
+                            )
+                            import shutil
+                            shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
+                            st.session_state.excel_processado = True
+                            st.session_state.nome_arquivo_processado = uploaded_file.name
+                        else:
+                            st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
+                    except Exception as e:
+                        st.error(f"Erro no processamento: {e}") 
+        else:
+            # Já processado: só mostra o botão de download
+            if os.path.exists("rotas_bh_dados_tratados_completos.xlsx"):
+                st.download_button(
+                    label="📥 Baixar Excel consolidado",
+                    data=open("rotas_bh_dados_tratados_completos.xlsx", "rb").read(),
+                    file_name="rotas_bh_dados_tratados_completos.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_excel_consolidado"
+                )
+    else:
+        # Resetar caso usuário remova o arquivo
+        st.session_state.excel_processado = False
+        st.session_state.nome_arquivo_processado = None
     
-                        import shutil
-                        shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
-                    else:
-                        st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
-                except Exception as e:
-                    st.error(f"Erro no processamento: {e}")    
 
 with tabs[2]:
     
