@@ -962,7 +962,7 @@ if not st.session_state.admin_autenticado:
                     resposta = st.empty()
                     if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
                         salvar_aceite(os_id, profissional, telefone, True, origem="portal")
-                        resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+                        resposta.success("✅ OBRIGADO! SEU INTERESSE FOI REGISTRADO E EM BREVE DAREMOS UM RETORNO!")
     else:
         st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
 
