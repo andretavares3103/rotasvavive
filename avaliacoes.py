@@ -805,23 +805,16 @@ def pipeline(file_path, output_dir):
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
     return final_path
 
-import json
-import os
-import pandas as pd
 import streamlit as st
+import os
+import json
+import pandas as pd
 
-tabs = st.tabs([
-    "Portal Atendimentos", 
-    "Upload de Arquivo", 
-    "Matriz de Rotas", 
-    "Aceites", 
-    "Profissionais Próximos", 
-    "Mensagem Rápida"
-])
-
-
-PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
-PORTAL_OS_LIST = "portal_atendimentos_os_list.json"
+# Tente configurar o locale (pode ser ignorado se não funcionar)
+try:
+    locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
+except:
+    pass
 
 def formatar_data_portugues(data):
     dias_pt = {
@@ -838,6 +831,7 @@ def formatar_data_portugues(data):
     try:
         s = str(data)
         if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+            # Trata explicitamente AAAA-MM-DD para não inverter mês/dia
             ano = s[0:4]
             mes = s[5:7]
             dia = s[8:10]
@@ -852,9 +846,45 @@ def formatar_data_portugues(data):
     except Exception:
         return str(data)
 
-# ---------- INÍCIO BLOCO TABS[0] ----------
 
-with tabs[0]:
+
+PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
+PORTAL_OS_LIST = "portal_atendimentos_os_list.json"
+
+# Função para registrar aceite (usada nos cards públicos ANTES da senha)
+def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
+    from datetime import datetime
+    ACEITES_FILE = "aceites.xlsx"
+    agora = datetime.now()
+    data = agora.strftime("%d/%m/%Y")
+    dia_semana = agora.strftime("%A")
+    horario = agora.strftime("%H:%M:%S")
+    if os.path.exists(ACEITES_FILE):
+        df = pd.read_excel(ACEITES_FILE)
+    else:
+        df = pd.DataFrame(columns=[
+            "OS", "Profissional", "Telefone", "Aceitou", 
+            "Data do Aceite", "Dia da Semana", "Horário do Aceite", "Origem"
+        ])
+    nova_linha = {
+        "OS": os_id,
+        "Profissional": profissional,
+        "Telefone": telefone,
+        "Aceitou": "Sim" if aceitou else "Não",
+        "Data do Aceite": data,
+        "Dia da Semana": dia_semana,
+        "Horário do Aceite": horario,
+        "Origem": origem if origem else ""
+    }
+    df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
+    df.to_excel(ACEITES_FILE, index=False)
+
+# Controle de autenticação global
+if "admin_autenticado" not in st.session_state:
+    st.session_state.admin_autenticado = False
+
+# Só mostra cards e campo de senha enquanto não autenticou
+if not st.session_state.admin_autenticado:
     st.markdown("""
         <div style='display:flex;align-items:center;gap:16px'>
             <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
@@ -863,143 +893,78 @@ with tabs[0]:
         <p style='color:#666;font-size:1.08em;margin:8px 0 18px 0'>
             Consulte abaixo os atendimentos disponíveis!
         </p>
-        """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-    # --------- Botão para re-selecionar atendimentos ---------
-    if st.button("Reselecionar atendimentos do portal (sem novo upload)"):
-        st.session_state.exibir_admin_portal = True
-
-    # Controle de exibição e autenticação admin
-    if "exibir_admin_portal" not in st.session_state:
-        st.session_state.exibir_admin_portal = False
-    if "admin_autenticado_portal" not in st.session_state:
-        st.session_state.admin_autenticado_portal = False
-
-    # BLOCO ADMIN: Upload ou reseleção
-    if st.session_state.exibir_admin_portal:
-        senha = st.text_input("Digite a senha de administrador", type="password", key="senha_portal_admin2")
-        if st.button("Validar senha", key="btn_validar_senha_portal2"):
-            if senha == "vvv":
-                st.session_state.admin_autenticado_portal = True
-            else:
-                st.error("Senha incorreta.")
-
-        if st.session_state.admin_autenticado_portal:
-            # Permite upload NOVO se desejar
-            uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
-            if uploaded_file:
-                with open(PORTAL_EXCEL, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
-
-            # Permite reseleção sem novo upload (carrega arquivo existente)
-            if os.path.exists(PORTAL_EXCEL):
-                df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-
-                datas_disponiveis = sorted(df["Data 1"].dropna().unique())
-                datas_formatadas = [str(pd.to_datetime(d).date()) for d in datas_disponiveis]
-                datas_selecionadas = st.multiselect(
-                    "Filtrar atendimentos por Data",
-                    options=datas_formatadas,
-                    default=[],
-                    key="datas_multiselect_2"
-                )
-                if datas_selecionadas:
-                    df = df[df["Data 1"].astype(str).apply(lambda d: str(pd.to_datetime(d).date()) in datas_selecionadas)]
-
-                opcoes = [
-                    f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
-                    for _, row in df.iterrows()
-                    if not pd.isnull(row.OS)
-                ]
-                selecionadas = st.multiselect(
-                    "Selecione os atendimentos para exibir (OS | Cliente | Serviço | Bairro)",
-                    opcoes,
-                    key="os_multiselect_2"
-                )
-                if st.button("Salvar nova seleção de atendimentos", key="salvar_os_btn_2"):
-                    os_ids = [
-                        int(op.split()[1]) for op in selecionadas
-                        if op.startswith("OS ")
-                    ]
-                    with open(PORTAL_OS_LIST, "w") as f:
-                        json.dump(os_ids, f)
-                    st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                    st.session_state.exibir_admin_portal = False
-                    st.session_state.admin_autenticado_portal = False
-                    st.rerun()
-            else:
-                st.info("Nenhum arquivo encontrado. Faça upload do arquivo para começar.")
-    # BLOCO VISUALIZAÇÃO PÚBLICO
-    if not st.session_state.exibir_admin_portal:
-        if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-            with open(PORTAL_OS_LIST, "r") as f:
-                os_list = json.load(f)
-            # Só exibe OS selecionadas
-            df = df[~df["OS"].isna()]
-            df = df[pd.to_numeric(df["OS"], errors="coerce").isin(os_list)]
-            if df.empty:
-                st.info("Nenhum atendimento disponível.")
-            else:
-                st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
-                for _, row in df.iterrows():
-                    servico = row.get("Serviço", "")
-                    nome_cliente = row.get("Cliente", "")
-                    bairro = row.get("Bairro", "")
-                    data = formatar_data_portugues(row.get("Data 1", ""))
-                    hora_entrada = row.get("Hora de entrada", "")
-                    hora_servico = row.get("Horas de serviço", "")
-                    referencia = row.get("Ponto de Referencia", "")
-                    os_id = int(row["OS"])
-                    st.markdown(f"""
-                        <div style="
-                            background: #fff;
-                            border: 1.5px solid #eee;
-                            border-radius: 18px;
-                            padding: 18px 18px 12px 18px;
-                            margin-bottom: 14px;
-                            min-width: 260px;
-                            max-width: 440px;
-                            color: #00008B;
-                            font-family: Arial, sans-serif;
-                        ">
-                            <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
-                                {servico}
-                            </div>
-                            <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
-                                <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
-                            </div>
-                            <div style="font-size:0.95em; color:#00008B;">
-                                <b>Data:</b> <span>{data}</span><br>
-                                <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
-                                <b>Horas de serviço:</b> <span>{hora_servico}</span><br>
-                                <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    expander_style = """
-                    <style>
-                    div[role="button"][aria-expanded] {
-                        background: #25D366 !important;
-                        color: #fff !important;
-                        border-radius: 10px !important;
-                        font-weight: bold;
-                        font-size: 1.08em;
-                    }
-                    </style>
-                    """
-                    st.markdown(expander_style, unsafe_allow_html=True)
-                    with st.expander("Tem disponibilidade? Clique aqui para aceitar este atendimento!"):
-                        profissional = st.text_input(f"Nome da Profissional", key=f"prof_nome_{os_id}")
-                        telefone = st.text_input(f"Telefone para contato", key=f"prof_tel_{os_id}")
-                        resposta = st.empty()
-                        if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
-                            salvar_aceite(os_id, profissional, telefone, True, origem="portal")
-                            resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+    # ---- BLOCO VISUALIZAÇÃO (PÚBLICO) ----
+    if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
+        df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
+        with open(PORTAL_OS_LIST, "r") as f:
+            os_list = json.load(f)
+        df = df[~df["OS"].isna()]  # remove linhas totalmente vazias de OS
+        df = df[pd.to_numeric(df["OS"], errors="coerce").isin(os_list)]
+        if df.empty:
+            st.info("Nenhum atendimento disponível.")
         else:
-            st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
+            st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
+            for _, row in df.iterrows():
+                servico = row.get("Serviço", "")
+                nome_cliente = row.get("Cliente", "")
+                bairro = row.get("Bairro", "")
+                data = row.get("Data 1", "")
+                data_pt = formatar_data_portugues(data)
+                hora_entrada = row.get("Hora de entrada", "")
+                hora_servico = row.get("Horas de serviço", "")
+                referencia = row.get("Ponto de Referencia", "")
+                os_id = int(row["OS"])
 
+                st.markdown(f"""
+                    <div style="
+                        background: #fff;
+                        border: 1.5px solid #eee;
+                        border-radius: 18px;
+                        padding: 18px 18px 12px 18px;
+                        margin-bottom: 14px;
+                        min-width: 260px;
+                        max-width: 440px;
+                        color: #00008B;
+                        font-family: Arial, sans-serif;
+                    ">
+                        <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
+                            {servico}
+                        </div>
+                        <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
+                            <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
+                        </div>
+                        <div style="font-size:0.95em; color:#00008B;">
+                            <b>Data:</b> <span>{data_pt}</span><br>
+                            <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
+                            <b>Horas de serviço:</b> <span>{hora_servico}</span><br>
+                            <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                expander_style = """
+                <style>
+                /* Aplica fundo verde e texto branco ao expander do Streamlit */
+                div[role="button"][aria-expanded] {
+                    background: #25D366 !important;
+                    color: #fff !important;
+                    border-radius: 10px !important;
+                    font-weight: bold;
+                    font-size: 1.08em;
+                }
+                </style>
+                """
+                st.markdown(expander_style, unsafe_allow_html=True)
+                with st.expander("Tem disponibilidade? Clique aqui para aceitar este atendimento!"):
+                    profissional = st.text_input(f"Nome da Profissional", key=f"prof_nome_{os_id}")
+                    telefone = st.text_input(f"Telefone para contato", key=f"prof_tel_{os_id}")
+                    resposta = st.empty()
+                    if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
+                        salvar_aceite(os_id, profissional, telefone, True, origem="portal")
+                        resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+    else:
+        st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
 
     # ---- CAMPO DE SENHA para liberar as demais abas ----
     senha = st.text_input("Área restrita. Digite a senha para liberar as demais abas:", type="password")
@@ -1015,7 +980,6 @@ with tabs[0]:
 
 
 # Se autenticado, agora sim mostra TODAS as abas normalmente!
-
 tabs = st.tabs(["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites", "Profissionais Próximos", "Mensagem Rápida"])
 
 with tabs[1]:
