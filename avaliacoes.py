@@ -705,7 +705,7 @@ def pipeline(file_path, output_dir):
             col += 1
         
         # 7️⃣ Complemento: Mais próximos (caso não tenha batido 20 colunas)
-        if col <= 10:
+        if col <= 15:
             dist_restantes = df_distancias[(df_distancias["CPF_CNPJ"] == cpf)].copy()
             dist_restantes = dist_restantes[~dist_restantes["ID Prestador"].isin(utilizados | set(bloqueados) | preferidas_alocadas_dia[data_atendimento])]
             dist_restantes = dist_restantes.sort_values("Distância (km)")
