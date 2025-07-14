@@ -632,7 +632,7 @@ def pipeline(file_path, output_dir):
         dist_cand = dist_cand[~dist_cand["ID Prestador"].isin(utilizados | set(bloqueados) | preferidas_alocadas_dia[data_atendimento])]
         dist_cand = dist_cand.sort_values("Distância (km)")
         for _, dist_row in dist_cand.iterrows():
-            if col > 10:
+            if col > 15:
                 break
             prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == str(dist_row["ID Prestador"])]
             if prof.empty:
@@ -671,7 +671,7 @@ def pipeline(file_path, output_dir):
         # 6️⃣ Sumidinhos/baixa disponibilidade
         sumidinhos_para_incluir = [sum_id for sum_id in df_sumidinhos["ID Prestador"].astype(str) if sum_id in utilizados]
         for sum_id in sumidinhos_para_incluir:
-            if col > 10:
+            if col > 15:
                 break
             if sum_id in bloqueados or sum_id in preferidas_alocadas_dia[data_atendimento]:
                 continue
@@ -710,7 +710,7 @@ def pipeline(file_path, output_dir):
             dist_restantes = dist_restantes[~dist_restantes["ID Prestador"].isin(utilizados | set(bloqueados) | preferidas_alocadas_dia[data_atendimento])]
             dist_restantes = dist_restantes.sort_values("Distância (km)")
             for _, dist_row in dist_restantes.iterrows():
-                if col > 10:
+                if col > 15:
                     break
                 prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == str(dist_row["ID Prestador"])]
                 if prof.empty:
@@ -759,7 +759,7 @@ def pipeline(file_path, output_dir):
     )
 
     
-    for i in range(1, 11):
+    for i in range(1, 16):
         if f"Classificação da Profissional {i}" not in df_matriz_rotas.columns:
             df_matriz_rotas[f"Classificação da Profissional {i}"] = pd.NA
         if f"Critério {i}" not in df_matriz_rotas.columns:
@@ -775,7 +775,7 @@ def pipeline(file_path, output_dir):
         "Duração do Serviço", "Hora de entrada","Observações prestador", "Ponto de Referencia", "Mensagem Padrão"
     ]
     prestador_cols = []
-    for i in range(1, 11):
+    for i in range(1, 16):
         prestador_cols.extend([
             f"Classificação da Profissional {i}",
             f"Critério {i}",
@@ -1068,7 +1068,7 @@ with tabs[2]:
         clientes = df_rotas["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_rotas")
         profissionais = []
-        for i in range(1, 11):
+        for i in range(1, 16):
             profissionais.extend(df_rotas[f"Nome Prestador {i}"].dropna().unique())
         profissionais = list(set([p for p in profissionais if isinstance(p, str)]))
         profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + profissionais, key="prof_rotas")
@@ -1079,7 +1079,7 @@ with tabs[2]:
             df_rotas_filt = df_rotas_filt[df_rotas_filt["Nome Cliente"] == cliente_sel]
         if profissional_sel != "Todos":
             mask = False
-            for i in range(1, 11):
+            for i in range(1, 16):
                 mask |= (df_rotas_filt[f"Nome Prestador {i}"] == profissional_sel)
             df_rotas_filt = df_rotas_filt[mask]
         st.dataframe(df_rotas_filt, use_container_width=True)
