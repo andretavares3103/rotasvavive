@@ -1068,7 +1068,7 @@ with tabs[2]:
         clientes = df_rotas["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_rotas")
         profissionais = []
-        for i in range(1, 16):
+        for i in range(1, 15):
             profissionais.extend(df_rotas[f"Nome Prestador {i}"].dropna().unique())
         profissionais = list(set([p for p in profissionais if isinstance(p, str)]))
         profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + profissionais, key="prof_rotas")
@@ -1079,7 +1079,7 @@ with tabs[2]:
             df_rotas_filt = df_rotas_filt[df_rotas_filt["Nome Cliente"] == cliente_sel]
         if profissional_sel != "Todos":
             mask = False
-            for i in range(1, 16):
+            for i in range(1, 15):
                 mask |= (df_rotas_filt[f"Nome Prestador {i}"] == profissional_sel)
             df_rotas_filt = df_rotas_filt[mask]
         st.dataframe(df_rotas_filt, use_container_width=True)
