@@ -632,7 +632,7 @@ def pipeline(file_path, output_dir):
         dist_cand = dist_cand[~dist_cand["ID Prestador"].isin(utilizados | set(bloqueados) | preferidas_alocadas_dia[data_atendimento])]
         dist_cand = dist_cand.sort_values("Distância (km)")
         for _, dist_row in dist_cand.iterrows():
-            if col > 10:
+            if col > 15:
                 break
             prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == str(dist_row["ID Prestador"])]
             if prof.empty:
@@ -671,7 +671,7 @@ def pipeline(file_path, output_dir):
         # 6️⃣ Sumidinhos/baixa disponibilidade
         sumidinhos_para_incluir = [sum_id for sum_id in df_sumidinhos["ID Prestador"].astype(str) if sum_id in utilizados]
         for sum_id in sumidinhos_para_incluir:
-            if col > 10:
+            if col > 15:
                 break
             if sum_id in bloqueados or sum_id in preferidas_alocadas_dia[data_atendimento]:
                 continue
@@ -705,7 +705,7 @@ def pipeline(file_path, output_dir):
             col += 1
         
         # 7️⃣ Complemento: Mais próximos (caso não tenha batido 20 colunas)
-        if col <= 10:
+        if col <= 15:
             dist_restantes = df_distancias[(df_distancias["CPF_CNPJ"] == cpf)].copy()
             dist_restantes = dist_restantes[~dist_restantes["ID Prestador"].isin(utilizados | set(bloqueados) | preferidas_alocadas_dia[data_atendimento])]
             dist_restantes = dist_restantes.sort_values("Distância (km)")
@@ -759,7 +759,7 @@ def pipeline(file_path, output_dir):
     )
 
     
-    for i in range(1, 11):
+    for i in range(1, 16):
         if f"Classificação da Profissional {i}" not in df_matriz_rotas.columns:
             df_matriz_rotas[f"Classificação da Profissional {i}"] = pd.NA
         if f"Critério {i}" not in df_matriz_rotas.columns:
@@ -775,7 +775,7 @@ def pipeline(file_path, output_dir):
         "Duração do Serviço", "Hora de entrada","Observações prestador", "Ponto de Referencia", "Mensagem Padrão"
     ]
     prestador_cols = []
-    for i in range(1, 11):
+    for i in range(1, 16):
         prestador_cols.extend([
             f"Classificação da Profissional {i}",
             f"Critério {i}",
