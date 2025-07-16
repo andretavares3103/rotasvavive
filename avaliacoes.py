@@ -128,7 +128,7 @@ def gerar_mensagem_personalizada(
     rodape = """
 O atendimento será confirmado após o aceite!
 *1)*    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
-*2)*    Lembre-se das nossas 3 confirmações do atendimento!
+*2)*    Lembre-se das nossas  confirmações do atendimento!
 
 Abs, Vavivê!
 """
@@ -558,7 +558,7 @@ def pipeline(file_path, output_dir):
                             preferidas_alocadas_dia[data_atendimento].add(id_prof)
                         col += 1
         
-        # 3️⃣ Último profissional que atendeu
+        # ️⃣ Último profissional que atendeu
         df_hist_cliente = df_historico_60_dias[df_historico_60_dias["CPF_CNPJ"] == cpf]
         if not df_hist_cliente.empty:
             df_hist_cliente = df_hist_cliente.sort_values("Data 1", ascending=False)
@@ -918,7 +918,7 @@ if not st.session_state.admin_autenticado:
             df["OS"] = padronizar_os_coluna(df["OS"])
             aceites_sim = df_aceites[df_aceites["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
             contagem = aceites_sim.groupby("OS").size()
-            os_3mais = contagem[contagem >= 3].index.tolist()
+            os_3mais = contagem[contagem >= 5].index.tolist()
             df = df[~df["OS"].isin(os_3mais)]
         # --------------------------------------
 
@@ -1363,7 +1363,7 @@ with tabs[0]:
                     <style>
                     /* Aplica fundo verde e texto branco ao expander do Streamlit */
                     div[role="button"][aria-expanded] {
-                        background: #25D366 !important;
+                        background: #25D66 !important;
                         color: #fff !important;
                         border-radius: 10px !important;
                         font-weight: bold;
@@ -1388,7 +1388,7 @@ with tabs[0]:
 with tabs[4]:
         st.subheader("Buscar Profissionais Próximos")
         lat = st.number_input("Latitude", value=-19.9, format="%.6f")
-        lon = st.number_input("Longitude", value=-43.9, format="%.6f")
+        lon = st.number_input("Longitude", value=-4.9, format="%.6f")
         n = st.number_input("Qtd. profissionais", min_value=1, value=5, step=1)
         if st.button("Buscar"):
             # Usa o df_profissionais já tratado do pipeline
