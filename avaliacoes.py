@@ -645,7 +645,7 @@ def pipeline(file_path, output_dir):
                     if pd.notnull(lat_prof) and pd.notnull(lon_prof) and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
                         dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == queridinha_id)]
                         distancia = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else np.nan
-                        if distancia <= 5.0:
+                        if distancia  5.0:
                             qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == queridinha_id)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == queridinha_id)].empty else 0
                             qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == queridinha_id]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == queridinha_id].empty else 0
                             criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km"
@@ -956,7 +956,7 @@ if not st.session_state.admin_autenticado:
             df["OS"] = padronizar_os_coluna(df["OS"])
             aceites_sim = df_aceites[df_aceites["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
             contagem = aceites_sim.groupby("OS").size()
-            os_3mais = contagem[contagem >= 7].index.tolist()
+            os_3mais = contagem[contagem >= 4].index.tolist()
             df = df[~df["OS"].isin(os_3mais)]
         # --------------------------------------
 
