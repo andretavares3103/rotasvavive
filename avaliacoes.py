@@ -455,12 +455,40 @@ def pipeline(file_path, output_dir):
     debug_lista = []
 
     
-    for _, atendimento in df_atendimentos_futuros_validos.iterrows():
+    # 1️⃣ PRÉ-ALOCAR TODAS AS PROFISSIONAIS PREFERIDAS NO DIA
+    # Monta dicionário: {data: {profissional_id: atendimento_os}}
+    aloc_preferidas_dia = dict()
+    preferida_para_os = dict()  # (data, prof_id) -> os_id
+    
+    for data_atendimento in df_atendimentos_futuros_validos["Data 1"].dt.date.unique():
+        aloc_preferidas_dia[data_atendimento] = set()
+    
+    # Pré-aloca: para cada atendimento, se tem preferida, marca para aquele atendimento, e bloqueia para outros
+    for idx, atendimento in df_atendimentos_futuros_validos.iterrows():
         data_atendimento = atendimento["Data 1"].date()
-        if data_atendimento not in preferidas_alocadas_dia:
-            preferidas_alocadas_dia[data_atendimento] = set()
-        os_id = atendimento["OS"]
         cpf = atendimento["CPF_CNPJ"]
+        os_id = atendimento["OS"]
+        preferencia_cliente_df = df_preferencias_completo[df_preferencias_completo["CPF_CNPJ"] == cpf]
+        if not preferencia_cliente_df.empty:
+            id_preferida = str(preferencia_cliente_df.iloc[0]["ID Prestador"]).strip()
+            # Só aloca se profissional existe na base e não está bloqueada para esse dia
+            profissional_preferida_info = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_preferida]
+            if (
+                not profissional_preferida_info.empty
+                and id_preferida not in aloc_preferidas_dia[data_atendimento]
+                and "inativo" not in profissional_preferida_info.iloc[0]["Nome Prestador"].lower()
+            ):
+                # Aloca e bloqueia para todos os outros atendimentos desse dia
+                aloc_preferidas_dia[data_atendimento].add(id_preferida)
+                preferida_para_os[(data_atendimento, id_preferida)] = os_id
+    
+    # 2️⃣ AGORA MONTE A MATRIZ DE ROTAS, USANDO A RESTRIÇÃO DAS PREFERIDAS
+    matriz_resultado_corrigida = []
+    
+    for idx, atendimento in df_atendimentos_futuros_validos.iterrows():
+        data_atendimento = atendimento["Data 1"].date()
+        cpf = atendimento["CPF_CNPJ"]
+        os_id = atendimento["OS"]
         nome_cliente = atendimento["Cliente"]
         data_1 = atendimento["Data 1"]
         servico = atendimento["Serviço"]
@@ -475,7 +503,7 @@ def pipeline(file_path, output_dir):
             df_bloqueio_completo[df_bloqueio_completo["CPF_CNPJ"] == cpf]["ID Prestador"]
             .astype(str).str.strip().tolist()
         )
-        
+    
         linha = {
             "OS": os_id,
             "CPF_CNPJ": cpf,
@@ -510,55 +538,54 @@ def pipeline(file_path, output_dir):
         )
         utilizados = set()
         col = 1
-        
-        # 1️⃣ Preferência do Cliente
+    
+        # 1️⃣ ALOCA A PROFISSIONAL PREFERIDA JÁ BLOQUEADA NA VARREDURA
         preferencia_cliente_df = df_preferencias_completo[df_preferencias_completo["CPF_CNPJ"] == cpf]
         preferida_id = None
         if not preferencia_cliente_df.empty:
             id_preferida_temp = str(preferencia_cliente_df.iloc[0]["ID Prestador"]).strip()
-            profissional_preferida_info = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_preferida_temp]
-            if (
-                not profissional_preferida_info.empty
-                and id_preferida_temp not in bloqueados
-                and pd.notnull(profissional_preferida_info.iloc[0]["Latitude Profissional"])
-                and pd.notnull(profissional_preferida_info.iloc[0]["Longitude Profissional"])
-                and "inativo" not in profissional_preferida_info.iloc[0]["Nome Prestador"].lower()
-                and id_preferida_temp not in preferidas_alocadas_dia[data_atendimento]
-            ):
-                preferida_id = id_preferida_temp
-                nome_prof = profissional_preferida_info.iloc[0]["Nome Prestador"]
-                celular = profissional_preferida_info.iloc[0]["Celular"]
-                lat_prof = profissional_preferida_info.iloc[0]["Latitude Profissional"]
-                lon_prof = profissional_preferida_info.iloc[0]["Longitude Profissional"]
-                qtd_atend_cliente_pref = df_cliente_prestador[
-                    (df_cliente_prestador["CPF_CNPJ"] == cpf) &
-                    (df_cliente_prestador["ID Prestador"] == preferida_id)
-                ]["Qtd Atendimentos Cliente-Prestador"]
-                qtd_atend_cliente_pref = int(qtd_atend_cliente_pref.iloc[0]) if not qtd_atend_cliente_pref.empty else 0
-                qtd_atend_total_pref = df_qtd_por_prestador[
-                    df_qtd_por_prestador["ID Prestador"] == preferida_id
-                ]["Qtd Atendimentos Prestador"]
-                qtd_atend_total_pref = int(qtd_atend_total_pref.iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == preferida_id].empty else 0
-                distancia_pref_df = df_distancias[
-                    (df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == preferida_id)
-                ]
-                distancia_pref = float(distancia_pref_df["Distância (km)"].iloc[0]) if not distancia_pref_df.empty else np.nan
-                criterio = f"cliente: {qtd_atend_cliente_pref} | total: {qtd_atend_total_pref} — {distancia_pref:.2f} km"
-                linha[f"Classificação da Profissional {col}"] = col
-                linha[f"Critério {col}"] = criterio
-                linha[f"Nome Prestador {col}"] = nome_prof
-                linha[f"Celular {col}"] = celular
-                linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                    nome_prof, nome_cliente, data_1, servico,
-                    duracao_servico, rua, numero, complemento, bairro, cidade,
-                    latitude, longitude, ja_atendeu=True,
-                    hora_entrada=hora_entrada,
-                    obs_prestador=obs_prestador
-                )
-                linha[f"Critério Utilizado {col}"] = "Preferência do Cliente"
-                utilizados.add(preferida_id)
-                preferidas_alocadas_dia[data_atendimento].add(preferida_id)
-                col += 1
+            if preferida_para_os.get((data_atendimento, id_preferida_temp), None) == os_id:
+                profissional_preferida_info = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_preferida_temp]
+                if (
+                    not profissional_preferida_info.empty
+                    and id_preferida_temp not in bloqueados
+                    and pd.notnull(profissional_preferida_info.iloc[0]["Latitude Profissional"])
+                    and pd.notnull(profissional_preferida_info.iloc[0]["Longitude Profissional"])
+                    and "inativo" not in profissional_preferida_info.iloc[0]["Nome Prestador"].lower()
+                ):
+                    preferida_id = id_preferida_temp
+                    nome_prof = profissional_preferida_info.iloc[0]["Nome Prestador"]
+                    celular = profissional_preferida_info.iloc[0]["Celular"]
+                    lat_prof = profissional_preferida_info.iloc[0]["Latitude Profissional"]
+                    lon_prof = profissional_preferida_info.iloc[0]["Longitude Profissional"]
+                    qtd_atend_cliente_pref = df_cliente_prestador[
+                        (df_cliente_prestador["CPF_CNPJ"] == cpf) &
+                        (df_cliente_prestador["ID Prestador"] == preferida_id)
+                    ]["Qtd Atendimentos Cliente-Prestador"]
+                    qtd_atend_cliente_pref = int(qtd_atend_cliente_pref.iloc[0]) if not qtd_atend_cliente_pref.empty else 0
+                    qtd_atend_total_pref = df_qtd_por_prestador[
+                        df_qtd_por_prestador["ID Prestador"] == preferida_id
+                    ]["Qtd Atendimentos Prestador"]
+                    qtd_atend_total_pref = int(qtd_atend_total_pref.iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == preferida_id].empty else 0
+                    distancia_pref_df = df_distancias[
+                        (df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == preferida_id)
+                    ]
+                    distancia_pref = float(distancia_pref_df["Distância (km)"].iloc[0]) if not distancia_pref_df.empty else np.nan
+                    criterio = f"cliente: {qtd_atend_cliente_pref} | total: {qtd_atend_total_pref} — {distancia_pref:.2f} km"
+                    linha[f"Classificação da Profissional {col}"] = col
+                    linha[f"Critério {col}"] = criterio
+                    linha[f"Nome Prestador {col}"] = nome_prof
+                    linha[f"Celular {col}"] = celular
+                    linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+                        nome_prof, nome_cliente, data_1, servico,
+                        duracao_servico, rua, numero, complemento, bairro, cidade,
+                        latitude, longitude, ja_atendeu=True,
+                        hora_entrada=hora_entrada,
+                        obs_prestador=obs_prestador
+                    )
+                    linha[f"Critério Utilizado {col}"] = "Preferência do Cliente"
+                    utilizados.add(preferida_id)
+                    col += 1
         
         # 2️⃣ Mais atendeu o cliente
         df_mais_atendeu = df_cliente_prestador[df_cliente_prestador["CPF_CNPJ"] == cpf]
