@@ -925,7 +925,7 @@ if not st.session_state.admin_autenticado:
             df["OS"] = padronizar_os_coluna(df["OS"])
             aceites_sim = df_aceites[df_aceites["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
             contagem = aceites_sim.groupby("OS").size()
-            os_3mais = contagem[contagem >= 4].index.tolist()
+            os_3mais = contagem[contagem >= 2].index.tolist()
             df = df[~df["OS"].isin(os_3mais)]
         # --------------------------------------
 
@@ -1447,3 +1447,4 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
