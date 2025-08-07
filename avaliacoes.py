@@ -616,49 +616,49 @@ def pipeline(file_path, output_dir):
         preferida_id = preferida_do_cliente_no_dia[data_atendimento].get(cpf, None)
     
     def _tenta_adicionar(id_prof, criterio_usado, ja_atendeu_flag):
-    nonlocal col
-    id_prof = str(id_prof).strip()
-    if col > 15:
-        return False
-
-    # NOVO: bloqueio global por dia (não repetir profissional no mesmo dia)
-    if id_prof in profissionais_usadas_no_dia[data_atendimento]:
-        return False
-
-    if id_prof in utilizados or id_prof in bloqueados:
-        return False
-    if _reservada_para_outro(data_atendimento, id_prof, cpf):
-        return False
-
-    prof = _get_prof_row(id_prof)
-    if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
-        return False
-    lat_prof = prof.iloc[0]["Latitude Profissional"]; lon_prof = prof.iloc[0]["Longitude Profissional"]
-    if pd.isnull(lat_prof) or pd.isnull(lon_prof):
-        return False
-
-    qtd_cli = _get_qtd(df_cliente_prestador, cpf, id_prof)
-    qtd_tot = _get_qtd_total(df_qtd_por_prestador, id_prof)
-    dist = _get_dist(cpf, id_prof)
-    criterio_txt = f"cliente: {qtd_cli} | total: {qtd_tot}" + (f" — {dist:.2f} km" if dist is not None else "")
-
-    linha[f"Classificação da Profissional {col}"] = col
-    linha[f"Critério {col}"] = criterio_txt
-    linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
-    linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-    linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-        prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico, duracao_servico,
-        rua, numero, complemento, bairro, cidade, latitude, longitude,
-        ja_atendeu=ja_atendeu_flag, hora_entrada=hora_entrada, obs_prestador=obs_prestador
-    )
-    linha[f"Critério Utilizado {col}"] = criterio_usado
-
-    utilizados.add(id_prof)
-    col += 1
-
-    # NOVO: marcou como usada globalmente no dia
-    profissionais_usadas_no_dia[data_atendimento].add(id_prof)
-    return True
+        nonlocal col
+        id_prof = str(id_prof).strip()
+        if col > 15:
+            return False
+    
+        # NOVO: bloqueio global por dia (não repetir profissional no mesmo dia)
+        if id_prof in profissionais_usadas_no_dia[data_atendimento]:
+            return False
+    
+        if id_prof in utilizados or id_prof in bloqueados:
+            return False
+        if _reservada_para_outro(data_atendimento, id_prof, cpf):
+            return False
+    
+        prof = _get_prof_row(id_prof)
+        if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
+            return False
+        lat_prof = prof.iloc[0]["Latitude Profissional"]; lon_prof = prof.iloc[0]["Longitude Profissional"]
+        if pd.isnull(lat_prof) or pd.isnull(lon_prof):
+            return False
+    
+        qtd_cli = _get_qtd(df_cliente_prestador, cpf, id_prof)
+        qtd_tot = _get_qtd_total(df_qtd_por_prestador, id_prof)
+        dist = _get_dist(cpf, id_prof)
+        criterio_txt = f"cliente: {qtd_cli} | total: {qtd_tot}" + (f" — {dist:.2f} km" if dist is not None else "")
+    
+        linha[f"Classificação da Profissional {col}"] = col
+        linha[f"Critério {col}"] = criterio_txt
+        linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
+        linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
+        linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+            prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico, duracao_servico,
+            rua, numero, complemento, bairro, cidade, latitude, longitude,
+            ja_atendeu=ja_atendeu_flag, hora_entrada=hora_entrada, obs_prestador=obs_prestador
+        )
+        linha[f"Critério Utilizado {col}"] = criterio_usado
+    
+        utilizados.add(id_prof)
+        col += 1
+    
+        # NOVO: marcou como usada globalmente no dia
+        profissionais_usadas_no_dia[data_atendimento].add(id_prof)
+        return True
 
     
         # 1) PREFERÊNCIA do cliente (se reservada para este CPF)
@@ -1459,6 +1459,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
