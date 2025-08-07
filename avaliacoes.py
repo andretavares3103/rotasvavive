@@ -455,20 +455,107 @@ def pipeline(file_path, output_dir):
 
 
     
+        # ==============================
+    # PRÉ-VARRER O DIA E ALOCAR PREFERIDAS (com desempate) + LOOP CONSOLIDADO
+    # ==============================
     from collections import defaultdict
-
-    # --- Passo 1: Pré-varredura - mapeia todas as preferidas do cliente por data ---
-    preferidas_alocadas_dia = defaultdict(dict)  # {data: {id_profissional: cpf_cliente}}
-    for _, atendimento in df_atendimentos_futuros_validos.iterrows():
-        data_atendimento = atendimento["Data 1"].date()
-        cpf = atendimento["CPF_CNPJ"]
-        preferencia_cliente_df = df_preferencias[df_preferencias["CPF_CNPJ"] == cpf]
-        if not preferencia_cliente_df.empty:
-            id_preferida_temp = str(preferencia_cliente_df.iloc[0]["ID Prestador"]).strip()
-            if id_preferida_temp:
-                preferidas_alocadas_dia[data_atendimento][id_preferida_temp] = cpf
     
-    # --- Passo 2: Para cada atendimento, monta as sugestões respeitando o bloqueio ---
+    def _parse_hora(hora_str):
+        try:
+            s = str(hora_str).strip()
+            h, m = s.split(":")
+            return (int(h), int(m))
+        except Exception:
+            return (99, 99)
+    
+    # ---- 1) PRÉ-VARRER E ALOCAR PREFERIDAS DO DIA ----
+    preferida_do_cliente_no_dia = defaultdict(dict)      # {date: {cpf: id_prof}}
+    profissionais_reservadas_no_dia = defaultdict(set)   # {date: {id_prof, ...}}
+    
+    # Mapa simples CPF -> ID preferida
+    pref_map = df_preferencias.set_index("CPF_CNPJ")["ID Prestador"].astype(str).str.strip().to_dict()
+    
+    for data_atendimento, df_do_dia in df_atendimentos_futuros_validos.groupby(df_atendimentos_futuros_validos["Data 1"].dt.date):
+        candidatos = []
+        for _, row in df_do_dia.iterrows():
+            cpf = row["CPF_CNPJ"]
+            id_pref = pref_map.get(cpf, "")
+            if not id_pref:
+                continue
+    
+            # Bloqueio do cliente
+            bloqueados = (
+                df_bloqueio_completo[df_bloqueio_completo["CPF_CNPJ"] == cpf]["ID Prestador"]
+                .astype(str).str.strip().tolist()
+            )
+            if id_pref in bloqueados:
+                continue
+    
+            # Profissional válida (existe, não "inativo", com lat/lon)
+            prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_pref]
+            if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
+                continue
+            if pd.isnull(prof.iloc[0]["Latitude Profissional"]) or pd.isnull(prof.iloc[0]["Longitude Profissional"]):
+                continue
+    
+            # Métricas de desempate
+            hist_cli = df_cliente_prestador[
+                (df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == id_pref)
+            ]
+            qtd_cli = int(hist_cli["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not hist_cli.empty else 0
+    
+            dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == id_pref)]
+            dist_km = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else 9999.0
+    
+            hora = _parse_hora(row.get("Hora de entrada", ""))
+    
+            candidatos.append({
+                "cpf": cpf, "id_prof": id_pref,
+                "qtd_cli": qtd_cli, "dist_km": dist_km, "hora": hora
+            })
+    
+        if not candidatos:
+            continue
+    
+        # Resolver conflitos (muitos CPFs querendo a mesma preferida)
+        from collections import defaultdict as dd
+        por_prof = dd(list)
+        for c in candidatos:
+            por_prof[c["id_prof"]].append(c)
+    
+        for id_prof, lst in por_prof.items():
+            # (1) maior histórico com o cliente, (2) menor distância, (3) hora mais cedo
+            lst.sort(key=lambda x: (-x["qtd_cli"], x["dist_km"], x["hora"]))
+            escolhido = lst[0]
+            preferida_do_cliente_no_dia[data_atendimento][escolhido["cpf"]] = id_prof
+            profissionais_reservadas_no_dia[data_atendimento].add(id_prof)
+    
+    # ---- 2) LOOP CONSOLIDADO: MONTAR LISTA DE CANDIDATAS POR OS ----
+    def _reservada_para_outro(data_atendimento, id_prof, cpf):
+        """True se id_prof está reservada nesse dia para outro CPF (não este)."""
+        id_prof = str(id_prof).strip()
+        if id_prof not in profissionais_reservadas_no_dia[data_atendimento]:
+            return False
+        for cpf_res, id_res in preferida_do_cliente_no_dia[data_atendimento].items():
+            if str(id_res).strip() == id_prof:
+                return cpf_res != cpf
+        return False
+    
+    def _get_prof_row(id_prof):
+        return df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == str(id_prof).strip()]
+    
+    def _get_dist(cpf, id_prof):
+        d = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == str(id_prof))]
+        return float(d["Distância (km)"].iloc[0]) if not d.empty else None
+    
+    def _get_qtd(cli_prest, cpf, id_prof):
+        x = cli_prest[(cli_prest["CPF_CNPJ"] == cpf) & (cli_prest["ID Prestador"] == str(id_prof))]
+        return int(x["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not x.empty else 0
+    
+    def _get_qtd_total(qtd_prest, id_prof):
+        x = qtd_prest[qtd_prest["ID Prestador"] == str(id_prof)]
+        return int(x["Qtd Atendimentos Prestador"].iloc[0]) if not x.empty else 0
+    
     matriz_resultado_corrigida = []
     
     for _, atendimento in df_atendimentos_futuros_validos.iterrows():
@@ -482,276 +569,163 @@ def pipeline(file_path, output_dir):
         hora_entrada = atendimento["Hora de entrada"]
         obs_prestador = atendimento["Observações prestador"]
         ponto_referencia = atendimento["Ponto de Referencia"]
-        lat_cliente = atendimento["Latitude Cliente"]
-        lon_cliente = atendimento["Longitude Cliente"]
         plano = atendimento.get("Plano", "")
+    
+        # Bloqueio do cliente
         bloqueados = (
             df_bloqueio_completo[df_bloqueio_completo["CPF_CNPJ"] == cpf]["ID Prestador"]
             .astype(str).str.strip().tolist()
         )
-        linha = {
-            "OS": os_id,
-            "CPF_CNPJ": cpf,
-            "Nome Cliente": nome_cliente,
-            "Plano": plano,
-            "Data 1": data_1,
-            "Serviço": servico,
-            "Duração do Serviço": duracao_servico,
-            "Hora de entrada": hora_entrada,
-            "Observações prestador": obs_prestador,
-            "Ponto de Referencia": ponto_referencia
-        }
-        cliente_match = df_clientes[df_clientes["CPF_CNPJ"] == cpf]
-        cliente_info = cliente_match.iloc[0] if not cliente_match.empty else None
-        if cliente_info is not None:
-            rua = cliente_info["Rua"]
-            numero = cliente_info["Número"]
-            complemento = cliente_info["Complemento"]
-            bairro = cliente_info["Bairro"]
-            cidade = cliente_info["Cidade"]
-            latitude = cliente_info["Latitude Cliente"]
-            longitude = cliente_info["Longitude Cliente"]
+    
+        # Dados do cliente (para mensagem)
+        cli = df_clientes[df_clientes["CPF_CNPJ"] == cpf]
+        if not cli.empty:
+            rua = cli.iloc[0]["Rua"]; numero = cli.iloc[0]["Número"]
+            complemento = cli.iloc[0]["Complemento"]; bairro = cli.iloc[0]["Bairro"]
+            cidade = cli.iloc[0]["Cidade"]; latitude = cli.iloc[0]["Latitude Cliente"]; longitude = cli.iloc[0]["Longitude Cliente"]
         else:
             rua = numero = complemento = bairro = cidade = latitude = longitude = ""
+    
+        linha = {
+            "OS": os_id, "CPF_CNPJ": cpf, "Nome Cliente": nome_cliente, "Plano": plano,
+            "Data 1": data_1, "Serviço": servico, "Duração do Serviço": duracao_servico,
+            "Hora de entrada": hora_entrada, "Observações prestador": obs_prestador,
+            "Ponto de Referencia": ponto_referencia
+        }
+    
+        # Mensagem base (padrão)
         linha["Mensagem Padrão"] = gerar_mensagem_personalizada(
-            "PROFISSIONAL",
-            nome_cliente, data_1, servico,
-            duracao_servico, rua, numero, complemento, bairro, cidade,
-            latitude, longitude, ja_atendeu=False,
-            hora_entrada=hora_entrada, 
-            obs_prestador=obs_prestador
+            "PROFISSIONAL", nome_cliente, data_1, servico, duracao_servico,
+            rua, numero, complemento, bairro, cidade, latitude, longitude,
+            ja_atendeu=False, hora_entrada=hora_entrada, obs_prestador=obs_prestador
         )
+    
         utilizados = set()
         col = 1
+        reservadas_dia = set(profissionais_reservadas_no_dia[data_atendimento])
+        preferida_id = preferida_do_cliente_no_dia[data_atendimento].get(cpf, None)
     
-        # --- BLOQUEIO das preferidas do dia ---
-        preferidas_bloqueadas = set(preferidas_alocadas_dia[data_atendimento].keys())
-    
-        # ----------- 1️⃣ PREFERÊNCIA DO CLIENTE -----------
-        preferencia_cliente_df = df_preferencias[df_preferencias["CPF_CNPJ"] == cpf]
-        preferida_id = None
-        if not preferencia_cliente_df.empty:
-            id_preferida_temp = str(preferencia_cliente_df.iloc[0]["ID Prestador"]).strip()
-            profissional_preferida_info = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_preferida_temp]
-            if (
-                not profissional_preferida_info.empty
-                and id_preferida_temp not in bloqueados
-                and pd.notnull(profissional_preferida_info.iloc[0]["Latitude Profissional"])
-                and pd.notnull(profissional_preferida_info.iloc[0]["Longitude Profissional"])
-                and "inativo" not in profissional_preferida_info.iloc[0]["Nome Prestador"].lower()
-                and preferidas_alocadas_dia[data_atendimento].get(id_preferida_temp) == cpf
-            ):
-                preferida_id = id_preferida_temp
-                nome_prof = profissional_preferida_info.iloc[0]["Nome Prestador"]
-                celular = profissional_preferida_info.iloc[0]["Celular"]
-                qtd_atend_cliente_pref = df_cliente_prestador[
-                    (df_cliente_prestador["CPF_CNPJ"] == cpf) &
-                    (df_cliente_prestador["ID Prestador"] == preferida_id)
-                ]["Qtd Atendimentos Cliente-Prestador"]
-                qtd_atend_cliente_pref = int(qtd_atend_cliente_pref.iloc[0]) if not qtd_atend_cliente_pref.empty else 0
-                qtd_atend_total_pref = df_qtd_por_prestador[
-                    df_qtd_por_prestador["ID Prestador"] == preferida_id
-                ]["Qtd Atendimentos Prestador"]
-                qtd_atend_total_pref = int(qtd_atend_total_pref.iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == preferida_id].empty else 0
-                distancia_pref_df = df_distancias[
-                    (df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == preferida_id)
-                ]
-                distancia_pref = float(distancia_pref_df["Distância (km)"].iloc[0]) if not distancia_pref_df.empty else None
-                criterio = f"cliente: {qtd_atend_cliente_pref} | total: {qtd_atend_total_pref} — {distancia_pref:.2f} km" if distancia_pref is not None else ""
-                linha[f"Classificação da Profissional {col}"] = col
-                linha[f"Critério {col}"] = criterio
-                linha[f"Nome Prestador {col}"] = nome_prof
-                linha[f"Celular {col}"] = celular
-                linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                    nome_prof, nome_cliente, data_1, servico,
-                    duracao_servico, rua, numero, complemento, bairro, cidade,
-                    latitude, longitude, ja_atendeu=True,
-                    hora_entrada=hora_entrada,
-                    obs_prestador=obs_prestador
-                )
-                linha[f"Critério Utilizado {col}"] = "Preferência do Cliente"
-                utilizados.add(preferida_id)
-                col += 1
-    
-        # ----------- 2️⃣ MAIS ATENDEU O CLIENTE -----------
-        df_mais_atendeu = df_cliente_prestador[df_cliente_prestador["CPF_CNPJ"] == cpf]
-        if not df_mais_atendeu.empty:
-            mais_atend = df_mais_atendeu["Qtd Atendimentos Cliente-Prestador"].max()
-            mais_atendeu_ids = df_mais_atendeu[df_mais_atendeu["Qtd Atendimentos Cliente-Prestador"] == mais_atend]["ID Prestador"]
-            for id_ in mais_atendeu_ids:
-                id_prof = str(id_)
-                if (
-                    id_prof in utilizados or id_prof in bloqueados or
-                    (id_prof in preferidas_bloqueadas and preferidas_alocadas_dia[data_atendimento][id_prof] != cpf)
-                ):
-                    continue
-                prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_prof]
-                if not prof.empty:
-                    lat_prof = prof.iloc[0]["Latitude Profissional"]
-                    lon_prof = prof.iloc[0]["Longitude Profissional"]
-                    if pd.notnull(lat_prof) and pd.notnull(lon_prof) and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
-                        qtd_atend_cliente = int(mais_atend)
-                        qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof].empty else 0
-                        distancia = float(df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == id_prof)]["Distância (km)"].iloc[0]) if not df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == id_prof)].empty else None
-                        criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km" if distancia is not None else ""
-                        linha[f"Classificação da Profissional {col}"] = col
-                        linha[f"Critério {col}"] = criterio
-                        linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
-                        linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-                        linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                            prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
-                            duracao_servico, rua, numero, complemento, bairro, cidade,
-                            latitude, longitude, ja_atendeu=True,
-                            hora_entrada=hora_entrada,
-                            obs_prestador=obs_prestador
-                        )
-                        linha[f"Critério Utilizado {col}"] = "Mais atendeu o cliente"
-                        utilizados.add(id_prof)
-                        col += 1
-    
-        # ----------- 3️⃣ ÚLTIMO PROFISSIONAL -----------
-        df_hist_cliente = df_historico_60_dias[df_historico_60_dias["CPF_CNPJ"] == cpf]
-        if not df_hist_cliente.empty:
-            df_hist_cliente = df_hist_cliente.sort_values("Data 1", ascending=False)
-            ultimo_prof_id = str(df_hist_cliente["ID Prestador"].iloc[0])
-            if (
-                ultimo_prof_id not in utilizados
-                and ultimo_prof_id not in bloqueados
-                and (ultimo_prof_id not in preferidas_bloqueadas or preferidas_alocadas_dia[data_atendimento][ultimo_prof_id] == cpf)
-            ):
-                prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == ultimo_prof_id]
-                if not prof.empty:
-                    lat_prof = prof.iloc[0]["Latitude Profissional"]
-                    lon_prof = prof.iloc[0]["Longitude Profissional"]
-                    if pd.notnull(lat_prof) and pd.notnull(lon_prof) and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
-                        qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == ultimo_prof_id)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == ultimo_prof_id)].empty else 0
-                        qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == ultimo_prof_id]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == ultimo_prof_id].empty else 0
-                        distancia = float(df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == ultimo_prof_id)]["Distância (km)"].iloc[0]) if not df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == ultimo_prof_id)].empty else None
-                        criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km" if distancia is not None else ""
-                        linha[f"Classificação da Profissional {col}"] = col
-                        linha[f"Critério {col}"] = criterio
-                        linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
-                        linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-                        linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                            prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
-                            duracao_servico, rua, numero, complemento, bairro, cidade,
-                            latitude, longitude, ja_atendeu=True,
-                            hora_entrada=hora_entrada,
-                            obs_prestador=obs_prestador
-                        )
-                        linha[f"Critério Utilizado {col}"] = "Último profissional que atendeu"
-                        utilizados.add(ultimo_prof_id)
-                        col += 1
-    
-        # ----------- 4️⃣ QUERIDINHOS -----------
-        for _, qrow in df_queridinhos.iterrows():
-            queridinha_id = str(qrow["ID Prestador"]).strip()
-            if (
-                queridinha_id in utilizados or queridinha_id in bloqueados or
-                (queridinha_id in preferidas_bloqueadas and preferidas_alocadas_dia[data_atendimento][queridinha_id] != cpf)
-            ):
-                continue
-            prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == queridinha_id]
-            if not prof.empty:
-                lat_prof = prof.iloc[0]["Latitude Profissional"]
-                lon_prof = prof.iloc[0]["Longitude Profissional"]
-                if pd.notnull(lat_prof) and pd.notnull(lon_prof) and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
-                    dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == queridinha_id)]
-                    distancia = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else None
-                    if distancia is not None and distancia <= 5.0:
-                        qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == queridinha_id)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == queridinha_id)].empty else 0
-                        qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == queridinha_id]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == queridinha_id].empty else 0
-                        criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km"
-                        linha[f"Classificação da Profissional {col}"] = col
-                        linha[f"Critério {col}"] = criterio
-                        linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
-                        linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-                        linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                            prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
-                            duracao_servico, rua, numero, complemento, bairro, cidade,
-                            latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
-                            hora_entrada=hora_entrada,
-                            obs_prestador=obs_prestador
-                        )
-                        linha[f"Critério Utilizado {col}"] = "Profissional preferencial da plataforma (até 5 km)"
-                        utilizados.add(queridinha_id)
-                        col += 1
-    
-        # ----------- 5️⃣ MAIS PRÓXIMA GEOGRAFICAMENTE -----------
-        dist_cand = df_distancias[(df_distancias["CPF_CNPJ"] == cpf)].copy()
-        dist_cand = dist_cand[~dist_cand["ID Prestador"].isin(utilizados | set(bloqueados))]
-        dist_cand = dist_cand[
-            ~(
-                (dist_cand["ID Prestador"].isin(preferidas_bloqueadas)) & 
-                (dist_cand["ID Prestador"].map(lambda x: preferidas_alocadas_dia[data_atendimento][str(x)] if str(x) in preferidas_alocadas_dia[data_atendimento] else None) != cpf)
-            )
-        ]
-        dist_cand = dist_cand.sort_values("Distância (km)")
-        for _, dist_row in dist_cand.iterrows():
-            if col > 15:
-                break
-            id_prof = str(dist_row["ID Prestador"])
-            prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_prof]
+        def _tenta_adicionar(id_prof, criterio_usado, ja_atendeu_flag):
+            nonlocal col
+            id_prof = str(id_prof).strip()
+            if col > 15: 
+                return False
+            if id_prof in utilizados or id_prof in bloqueados:
+                return False
+            if _reservada_para_outro(data_atendimento, id_prof, cpf):
+                return False
+            prof = _get_prof_row(id_prof)
             if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
-                continue
-            lat_prof = prof.iloc[0]["Latitude Profissional"]
-            lon_prof = prof.iloc[0]["Longitude Profissional"]
-            if not (pd.notnull(lat_prof) and pd.notnull(lon_prof)):
-                continue
-            qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == id_prof)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == id_prof)].empty else 0
-            qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof].empty else 0
-            distancia = float(dist_row["Distância (km)"])
-            criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km"
+                return False
+            lat_prof = prof.iloc[0]["Latitude Profissional"]; lon_prof = prof.iloc[0]["Longitude Profissional"]
+            if pd.isnull(lat_prof) or pd.isnull(lon_prof):
+                return False
+    
+            qtd_cli = _get_qtd(df_cliente_prestador, cpf, id_prof)
+            qtd_tot = _get_qtd_total(df_qtd_por_prestador, id_prof)
+            dist = _get_dist(cpf, id_prof)
+            criterio_txt = f"cliente: {qtd_cli} | total: {qtd_tot}" + (f" — {dist:.2f} km" if dist is not None else "")
+    
             linha[f"Classificação da Profissional {col}"] = col
-            linha[f"Critério {col}"] = criterio
+            linha[f"Critério {col}"] = criterio_txt
             linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
             linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
             linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
-                duracao_servico, rua, numero, complemento, bairro, cidade,
-                latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
-                hora_entrada=hora_entrada,
-                obs_prestador=obs_prestador
+                prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico, duracao_servico,
+                rua, numero, complemento, bairro, cidade, latitude, longitude,
+                ja_atendeu=ja_atendeu_flag, hora_entrada=hora_entrada, obs_prestador=obs_prestador
             )
-            linha[f"Critério Utilizado {col}"] = "Mais próxima geograficamente"
+            linha[f"Critério Utilizado {col}"] = criterio_usado
             utilizados.add(id_prof)
             col += 1
+            return True
     
-        # ----------- 6️⃣ SUMIDINHOS (Baixa disponibilidade) -----------
-        for sum_id in df_sumidinhos["ID Prestador"].astype(str):
-            if (
-                sum_id in utilizados or sum_id in bloqueados or
-                (sum_id in preferidas_bloqueadas and preferidas_alocadas_dia[data_atendimento][sum_id] != cpf)
-            ):
-                continue
-            prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == sum_id]
-            if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
-                continue
-            lat_prof = prof.iloc[0]["Latitude Profissional"]
-            lon_prof = prof.iloc[0]["Longitude Profissional"]
-            if not (pd.notnull(lat_prof) and pd.notnull(lon_prof)):
-                continue
-            dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == sum_id)]
-            distancia = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else None
-            qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == sum_id)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == sum_id)].empty else 0
-            qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == sum_id]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == sum_id].empty else 0
-            criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km" if distancia is not None else ""
-            linha[f"Classificação da Profissional {col}"] = col
-            linha[f"Critério {col}"] = criterio
-            linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
-            linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-            linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
-                duracao_servico, rua, numero, complemento, bairro, cidade,
-                latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
-                hora_entrada=hora_entrada,
-                obs_prestador=obs_prestador
-            )
-            linha[f"Critério Utilizado {col}"] = "Baixa Disponibilidade"
-            utilizados.add(sum_id)
-            col += 1
+        # 1) PREFERÊNCIA do cliente (se reservada para este CPF)
+        if preferida_id:
+            _tenta_adicionar(preferida_id, "Preferência do Cliente", ja_atendeu_flag=True)
+    
+        # 2) MAIS ATENDEU o cliente
+        df_mais = df_cliente_prestador[df_cliente_prestador["CPF_CNPJ"] == cpf]
+        if not df_mais.empty and col <= 15:
+            max_at = df_mais["Qtd Atendimentos Cliente-Prestador"].max()
+            ids_mais = df_mais[df_mais["Qtd Atendimentos Cliente-Prestador"] == max_at]["ID Prestador"].astype(str)
+            for _id in ids_mais:
+                if col > 15: break
+                if _reservada_para_outro(data_atendimento, _id, cpf): 
+                    continue
+                _tenta_adicionar(_id, "Mais atendeu o cliente", ja_atendeu_flag=True)
+    
+        # 3) ÚLTIMO profissional (60 dias)
+        df_hist = df_historico_60_dias[df_historico_60_dias["CPF_CNPJ"] == cpf].sort_values("Data 1", ascending=False)
+        if not df_hist.empty and col <= 15:
+            ult_id = str(df_hist["ID Prestador"].iloc[0])
+            if not _reservada_para_outro(data_atendimento, ult_id, cpf):
+                _tenta_adicionar(ult_id, "Último profissional que atendeu", ja_atendeu_flag=True)
+    
+        # 4) QUERIDINHAS (≤ 5 km)
+        if col <= 15:
+            for _, qrow in df_queridinhos.iterrows():
+                if col > 15: break
+                qid = str(qrow["ID Prestador"]).strip()
+                if _reservada_para_outro(data_atendimento, qid, cpf): 
+                    continue
+                dist = _get_dist(cpf, qid)
+                if dist is not None and dist <= 5.0:
+                    _tenta_adicionar(qid, "Profissional preferencial da plataforma (até 5 km)", ja_atendeu_flag=(_get_qtd(df_cliente_prestador, cpf, qid) > 0))
+    
+        # 5) MAIS PRÓXIMAS geograficamente
+        if col <= 15:
+            dist_cand = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
+            # remove usados/bloqueados e reservadas de outros CPFs
+            dist_cand["ID Prestador"] = dist_cand["ID Prestador"].astype(str).str.strip()
+            dist_cand = dist_cand[
+                (~dist_cand["ID Prestador"].isin(utilizados)) &
+                (~dist_cand["ID Prestador"].isin(bloqueados)) &
+                (~dist_cand["ID Prestador"].apply(lambda x: _reservada_para_outro(data_atendimento, x, cpf)))
+            ].sort_values("Distância (km)")
+            for _, drow in dist_cand.iterrows():
+                if col > 15: break
+                _tenta_adicionar(drow["ID Prestador"], "Mais próxima geograficamente", ja_atendeu_flag=(_get_qtd(df_cliente_prestador, cpf, drow["ID Prestador"]) > 0))
+    
+        # 6) SUMIDINHAS
+        if col <= 15:
+            for sid in df_sumidinhos["ID Prestador"].astype(str):
+                if col > 15: break
+                if _reservada_para_outro(data_atendimento, sid, cpf): 
+                    continue
+                _tenta_adicionar(sid, "Baixa Disponibilidade", ja_atendeu_flag=(_get_qtd(df_cliente_prestador, cpf, sid) > 0))
     
         matriz_resultado_corrigida.append(linha)
+    
+    # ---- pós-loop: DataFrame e padronização de colunas 1..15 (mantém igual ao seu código) ----
+    df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
+    app_url = "https://rotasvavive.streamlit.app/"
+    df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
+        lambda row: f"👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n\n{row['Mensagem Padrão']}",
+        axis=1
+    )
+    
+    for i in range(1, 16):
+        for base in [f"Classificação da Profissional {i}", f"Critério {i}", f"Nome Prestador {i}", f"Celular {i}", f"Critério Utilizado {i}"]:
+            if base not in df_matriz_rotas.columns:
+                df_matriz_rotas[base] = pd.NA
+    
+    base_cols = [
+        "OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
+        "Duração do Serviço", "Hora de entrada", "Observações prestador",
+        "Ponto de Referencia", "Mensagem Padrão"
+    ]
+    prestador_cols = []
+    for i in range(1, 16):
+        prestador_cols.extend([
+            f"Classificação da Profissional {i}",
+            f"Critério {i}",
+            f"Nome Prestador {i}",
+            f"Celular {i}",
+            f"Critério Utilizado {i}",
+        ])
+    df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
+
 
 
 
@@ -1446,5 +1420,6 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
