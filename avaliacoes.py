@@ -455,7 +455,7 @@ def pipeline(file_path, output_dir):
 
 
     
-        # ==============================
+       # ==============================
     # PRÉ-VARRER O DIA E ALOCAR PREFERIDAS (com desempate) + LOOP CONSOLIDADO
     # ==============================
     from collections import defaultdict
@@ -725,7 +725,6 @@ def pipeline(file_path, output_dir):
             f"Critério Utilizado {i}",
         ])
     df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
-
 
 
 
@@ -1420,6 +1419,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
