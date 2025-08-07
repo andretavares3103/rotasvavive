@@ -1,4 +1,4 @@
-#
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -455,10 +455,8 @@ def pipeline(file_path, output_dir):
 
 
     
-        # ==============================
-    # PRÉ-VARRER O DIA E ALOCAR PREFERIDAS (com desempate)
-    # + UNICIDADE GLOBAL POR DIA
-    # + LOOP CONSOLIDADO COM ESPAÇAMENTO DE 1 KM ENTRE CANDIDATAS NA MESMA OS
+       # ==============================
+    # PRÉ-VARRER O DIA E ALOCAR PREFERIDAS (com desempate) + LOOP CONSOLIDADO
     # ==============================
     from collections import defaultdict
     
@@ -470,24 +468,14 @@ def pipeline(file_path, output_dir):
         except Exception:
             return (99, 99)
     
-    def _hora_tuple_or_max(x):
-        t = _parse_hora(x)
-        return t if t != (99, 99) else (99, 99)
-    
-    # ---- 0) ORDENAR OS POR DIA/HORA (melhor justiça de alocação)
-    df_atendimentos_futuros_validos = df_atendimentos_futuros_validos.copy()
-    df_atendimentos_futuros_validos["__data__"] = df_atendimentos_futuros_validos["Data 1"].dt.date
-    df_atendimentos_futuros_validos["__hora_tuple__"] = df_atendimentos_futuros_validos["Hora de entrada"].apply(_hora_tuple_or_max)
-    df_atendimentos_futuros_validos = df_atendimentos_futuros_validos.sort_values(["__data__", "__hora_tuple__"]).reset_index(drop=True)
-    
     # ---- 1) PRÉ-VARRER E ALOCAR PREFERIDAS DO DIA ----
     preferida_do_cliente_no_dia = defaultdict(dict)      # {date: {cpf: id_prof}}
     profissionais_reservadas_no_dia = defaultdict(set)   # {date: {id_prof, ...}}
     
-    # Mapa CPF -> ID preferida
+    # Mapa simples CPF -> ID preferida
     pref_map = df_preferencias.set_index("CPF_CNPJ")["ID Prestador"].astype(str).str.strip().to_dict()
     
-    for data_atendimento, df_do_dia in df_atendimentos_futuros_validos.groupby("__data__"):
+    for data_atendimento, df_do_dia in df_atendimentos_futuros_validos.groupby(df_atendimentos_futuros_validos["Data 1"].dt.date):
         candidatos = []
         for _, row in df_do_dia.iterrows():
             cpf = row["CPF_CNPJ"]
@@ -503,7 +491,7 @@ def pipeline(file_path, output_dir):
             if id_pref in bloqueados:
                 continue
     
-            # Profissional válida
+            # Profissional válida (existe, não "inativo", com lat/lon)
             prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_pref]
             if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
                 continue
@@ -529,20 +517,20 @@ def pipeline(file_path, output_dir):
         if not candidatos:
             continue
     
-        # Resolver conflitos (mesma pro preferida por vários CPFs no mesmo dia)
+        # Resolver conflitos (muitos CPFs querendo a mesma preferida)
         from collections import defaultdict as dd
         por_prof = dd(list)
         for c in candidatos:
             por_prof[c["id_prof"]].append(c)
     
         for id_prof, lst in por_prof.items():
-            # prioriza: (1) mais histórico, (2) menor distância, (3) hora mais cedo
+            # (1) maior histórico com o cliente, (2) menor distância, (3) hora mais cedo
             lst.sort(key=lambda x: (-x["qtd_cli"], x["dist_km"], x["hora"]))
             escolhido = lst[0]
             preferida_do_cliente_no_dia[data_atendimento][escolhido["cpf"]] = id_prof
             profissionais_reservadas_no_dia[data_atendimento].add(id_prof)
     
-    # ---- 2) ESTRUTURAS AUXILIARES ----
+    # ---- 2) LOOP CONSOLIDADO: MONTAR LISTA DE CANDIDATAS POR OS ----
     def _reservada_para_outro(data_atendimento, id_prof, cpf):
         """True se id_prof está reservada nesse dia para outro CPF (não este)."""
         id_prof = str(id_prof).strip()
@@ -568,15 +556,10 @@ def pipeline(file_path, output_dir):
         x = qtd_prest[qtd_prest["ID Prestador"] == str(id_prof)]
         return int(x["Qtd Atendimentos Prestador"].iloc[0]) if not x.empty else 0
     
-    # ---- 3) UNICIDADE GLOBAL POR DIA + LOOP COM ESPAÇAMENTO ----
-    # Profissionais já usados em alguma OS do dia
-    profissionais_usadas_no_dia = defaultdict(set)   # {date: {id_prof,...}}
-    ESPACAMENTO_KM = 1.0
-    
     matriz_resultado_corrigida = []
     
     for _, atendimento in df_atendimentos_futuros_validos.iterrows():
-        data_atendimento = atendimento["__data__"]
+        data_atendimento = atendimento["Data 1"].date()
         os_id = atendimento["OS"]
         cpf = atendimento["CPF_CNPJ"]
         nome_cliente = atendimento["Cliente"]
@@ -617,51 +600,25 @@ def pipeline(file_path, output_dir):
             ja_atendeu=False, hora_entrada=hora_entrada, obs_prestador=obs_prestador
         )
     
-        utilizados = set()                 # dedupe dentro da OS
+        utilizados = set()
         col = 1
+        reservadas_dia = set(profissionais_reservadas_no_dia[data_atendimento])
         preferida_id = preferida_do_cliente_no_dia[data_atendimento].get(cpf, None)
-        ultimo_dist_aceito = None          # controla o espaçamento de 1 km entre candidatas da OS
-    
-        def _passa_regras_globais(id_prof):
-            """Regras globais do dia: não reservada para outro CPF, não usada em outra OS do dia, não bloqueada."""
-            id_prof = str(id_prof).strip()
-            if id_prof in utilizados:
-                return False
-            if id_prof in bloqueados:
-                return False
-            if id_prof in profissionais_usadas_no_dia[data_atendimento]:
-                return False  # UNICIDADE GLOBAL POR DIA
-            if _reservada_para_outro(data_atendimento, id_prof, cpf):
-                return False
-            return True
-    
-        def _passa_espacamento(cpf, id_prof):
-            """Garante que a distância desta candidata seja >= (última aceita + 1 km)."""
-            nonlocal ultimo_dist_aceito
-            dist = _get_dist(cpf, id_prof)
-            if dist is None:
-                return False  # sem distância, não consegue validar a regra
-            if ultimo_dist_aceito is None:
-                return True   # primeira candidata da OS entra sem exigir +1 km
-            return dist >= (ultimo_dist_aceito + ESPACAMENTO_KM)
     
         def _tenta_adicionar(id_prof, criterio_usado, ja_atendeu_flag):
-            nonlocal col, ultimo_dist_aceito
+            nonlocal col
             id_prof = str(id_prof).strip()
-            if col > 15:
+            if col > 15: 
                 return False
-            if not _passa_regras_globais(id_prof):
+            if id_prof in utilizados or id_prof in bloqueados:
                 return False
-    
+            if _reservada_para_outro(data_atendimento, id_prof, cpf):
+                return False
             prof = _get_prof_row(id_prof)
             if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
                 return False
             lat_prof = prof.iloc[0]["Latitude Profissional"]; lon_prof = prof.iloc[0]["Longitude Profissional"]
             if pd.isnull(lat_prof) or pd.isnull(lon_prof):
-                return False
-    
-            # regra de espaçamento
-            if not _passa_espacamento(cpf, id_prof):
                 return False
     
             qtd_cli = _get_qtd(df_cliente_prestador, cpf, id_prof)
@@ -679,11 +636,7 @@ def pipeline(file_path, output_dir):
                 ja_atendeu=ja_atendeu_flag, hora_entrada=hora_entrada, obs_prestador=obs_prestador
             )
             linha[f"Critério Utilizado {col}"] = criterio_usado
-    
             utilizados.add(id_prof)
-            profissionais_usadas_no_dia[data_atendimento].add(id_prof)   # marca como usada no dia (UNICIDADE)
-            if dist is not None:
-                ultimo_dist_aceito = dist                                # atualiza o último dist para o espaçamento
             col += 1
             return True
     
@@ -698,28 +651,38 @@ def pipeline(file_path, output_dir):
             ids_mais = df_mais[df_mais["Qtd Atendimentos Cliente-Prestador"] == max_at]["ID Prestador"].astype(str)
             for _id in ids_mais:
                 if col > 15: break
+                if _reservada_para_outro(data_atendimento, _id, cpf): 
+                    continue
                 _tenta_adicionar(_id, "Mais atendeu o cliente", ja_atendeu_flag=True)
     
         # 3) ÚLTIMO profissional (60 dias)
         df_hist = df_historico_60_dias[df_historico_60_dias["CPF_CNPJ"] == cpf].sort_values("Data 1", ascending=False)
         if not df_hist.empty and col <= 15:
             ult_id = str(df_hist["ID Prestador"].iloc[0])
-            _tenta_adicionar(ult_id, "Último profissional que atendeu", ja_atendeu_flag=True)
+            if not _reservada_para_outro(data_atendimento, ult_id, cpf):
+                _tenta_adicionar(ult_id, "Último profissional que atendeu", ja_atendeu_flag=True)
     
         # 4) QUERIDINHAS (≤ 5 km)
         if col <= 15:
             for _, qrow in df_queridinhos.iterrows():
                 if col > 15: break
                 qid = str(qrow["ID Prestador"]).strip()
+                if _reservada_para_outro(data_atendimento, qid, cpf): 
+                    continue
                 dist = _get_dist(cpf, qid)
                 if dist is not None and dist <= 5.0:
                     _tenta_adicionar(qid, "Profissional preferencial da plataforma (até 5 km)", ja_atendeu_flag=(_get_qtd(df_cliente_prestador, cpf, qid) > 0))
     
-        # 5) MAIS PRÓXIMAS geograficamente (ordenadas por distância)
+        # 5) MAIS PRÓXIMAS geograficamente
         if col <= 15:
             dist_cand = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
+            # remove usados/bloqueados e reservadas de outros CPFs
             dist_cand["ID Prestador"] = dist_cand["ID Prestador"].astype(str).str.strip()
-            dist_cand = dist_cand.sort_values("Distância (km)")
+            dist_cand = dist_cand[
+                (~dist_cand["ID Prestador"].isin(utilizados)) &
+                (~dist_cand["ID Prestador"].isin(bloqueados)) &
+                (~dist_cand["ID Prestador"].apply(lambda x: _reservada_para_outro(data_atendimento, x, cpf)))
+            ].sort_values("Distância (km)")
             for _, drow in dist_cand.iterrows():
                 if col > 15: break
                 _tenta_adicionar(drow["ID Prestador"], "Mais próxima geograficamente", ja_atendeu_flag=(_get_qtd(df_cliente_prestador, cpf, drow["ID Prestador"]) > 0))
@@ -728,11 +691,13 @@ def pipeline(file_path, output_dir):
         if col <= 15:
             for sid in df_sumidinhos["ID Prestador"].astype(str):
                 if col > 15: break
+                if _reservada_para_outro(data_atendimento, sid, cpf): 
+                    continue
                 _tenta_adicionar(sid, "Baixa Disponibilidade", ja_atendeu_flag=(_get_qtd(df_cliente_prestador, cpf, sid) > 0))
     
         matriz_resultado_corrigida.append(linha)
     
-    # ---- pós-loop: igual ao seu código (padronização colunas, link, etc.) ----
+    # ---- pós-loop: DataFrame e padronização de colunas 1..15 (mantém igual ao seu código) ----
     df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
     app_url = "https://rotasvavive.streamlit.app/"
     df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
@@ -760,11 +725,6 @@ def pipeline(file_path, output_dir):
             f"Critério Utilizado {i}",
         ])
     df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
-    
-    # limpar colunas auxiliares
-    if "__data__" in df_atendimentos_futuros_validos.columns:
-        df_atendimentos_futuros_validos.drop(columns=["__data__", "__hora_tuple__"], inplace=True, errors="ignore")
-
 
 
 
@@ -1459,8 +1419,5 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
-
-
-
 
 
