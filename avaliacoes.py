@@ -750,42 +750,42 @@ def pipeline(file_path, output_dir):
             if base not in df_matriz_rotas.columns:
                 df_matriz_rotas[base] = pd.NA
     
-   base_cols = [
-    "OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
-    "Duração do Serviço", "Hora de entrada", "Observações prestador",
-    "Ponto de Referencia", "Mensagem Padrão"
-    ]
-    prestador_cols = []
-    for i in range(1, 15 + 1):
-        prestador_cols.extend([
-            f"Classificação da Profissional {i}",
-            f"Critério {i}",
-            f"Nome Prestador {i}",
-            f"Celular {i}",
-            f"Critério Utilizado {i}",
-        ])
-    
-    # --- montar df_matriz_rotas com guarda para vazio ---
-    if not matriz_resultado_corrigida:
-        # cria DF vazio já com todas as colunas no lugar
-        df_matriz_rotas = pd.DataFrame(columns=base_cols + prestador_cols)
-    else:
-        df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
-        # garantir colunas faltantes
-        for col in prestador_cols:
-            if col not in df_matriz_rotas.columns:
-                df_matriz_rotas[col] = pd.NA
-        if "Mensagem Padrão" not in df_matriz_rotas.columns:
-            df_matriz_rotas["Mensagem Padrão"] = ""
-    
-        # inserir link de aceite
-        df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
-            lambda row: f"👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n\n{row['Mensagem Padrão']}",
-            axis=1
-        )
-    
-    # reordenar colunas conforme layout
-    df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
+       base_cols = [
+        "OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
+        "Duração do Serviço", "Hora de entrada", "Observações prestador",
+        "Ponto de Referencia", "Mensagem Padrão"
+        ]
+        prestador_cols = []
+        for i in range(1, 15 + 1):
+            prestador_cols.extend([
+                f"Classificação da Profissional {i}",
+                f"Critério {i}",
+                f"Nome Prestador {i}",
+                f"Celular {i}",
+                f"Critério Utilizado {i}",
+            ])
+        
+        # --- montar df_matriz_rotas com guarda para vazio ---
+        if not matriz_resultado_corrigida:
+            # cria DF vazio já com todas as colunas no lugar
+            df_matriz_rotas = pd.DataFrame(columns=base_cols + prestador_cols)
+        else:
+            df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
+            # garantir colunas faltantes
+            for col in prestador_cols:
+                if col not in df_matriz_rotas.columns:
+                    df_matriz_rotas[col] = pd.NA
+            if "Mensagem Padrão" not in df_matriz_rotas.columns:
+                df_matriz_rotas["Mensagem Padrão"] = ""
+        
+            # inserir link de aceite
+            df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
+                lambda row: f"👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n\n{row['Mensagem Padrão']}",
+                axis=1
+            )
+        
+        # reordenar colunas conforme layout
+        df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
 
 
 
@@ -1480,6 +1480,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
