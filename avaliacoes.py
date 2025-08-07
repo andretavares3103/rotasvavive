@@ -159,7 +159,7 @@ def pipeline(file_path, output_dir):
         "ID","UpdatedAt","celular","cpf",
         "endereco-1-bairro","endereco-1-cidade","endereco-1-complemento",
         "endereco-1-estado","endereco-1-latitude","endereco-1-longitude",
-        "endereco-1-numero","endereco-1-rua","nome","OS","Serviço","Horas de serviço","Hora de entrada","Ponto de Referencia","Cliente","Data 1","Bairro"
+        "endereco-1-numero","endereco-1-rua","nome"
     ]].copy()
 
     df_clientes["ID Cliente"] = (
@@ -291,21 +291,62 @@ def pipeline(file_path, output_dir):
 
     # ---- ATENDIMENTOS ----
     df_atendimentos = pd.read_excel(file_path, sheet_name="Atendimentos")
-    colunas_desejadas = [
-        "OS","Status Serviço","Data 1","Plano","CPF/ CNPJ","Cliente","Serviço",
-        "Horas de serviço","Hora de entrada","Observações atendimento",
-        "Observações prestador","Ponto de Referencia","#Num Prestador","Prestador"
-    ]
-    df_atendimentos = df_atendimentos[colunas_desejadas].copy()
-    df_atendimentos["Data 1"] = pd.to_datetime(df_atendimentos["Data 1"], errors="coerce")
-    df_atendimentos["CPF_CNPJ"] = padronizar_cpf_cnpj(df_atendimentos["CPF/ CNPJ"])
-    df_atendimentos["Cliente"] = df_atendimentos["Cliente"].astype(str).str.strip()
-    df_atendimentos["Duração do Serviço"] = df_atendimentos["Horas de serviço"]
-    df_atendimentos["ID Prestador"] = (
-        df_atendimentos["#Num Prestador"].fillna("0").astype(str)
-        .str.replace(r"\.0$", "", regex=True).str.strip()
-    )
-    salvar_df(df_atendimentos, "df_atendimentos", output_dir)
+    
+    # normaliza cabeçalhos para comparar sem acentos/maiúsculas
+    import unicodedata
+    def norm(s):
+        s = str(s).strip()
+        s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+        return s.lower()
+    
+    rename_map = {}
+    cols_norm = {norm(c): c for c in df_atendimentos.columns}
+    
+    aliases = {
+        "os": ["os", "ordem de servico", "ordem de serviço", "codigo os", "codigo da os"],
+        "status servico": ["status servico", "status do servico", "status do serviço", "status"],
+        "data 1": ["data 1", "data", "data do atendimento"],
+        "plano": ["plano"],
+        "cpf/ cnpj": ["cpf/ cnpj","cpf/cnpj","cpf"],
+        "cliente": ["cliente","nome do cliente"],
+        "servico": ["servico","serviço","tipo de servico","tipo de serviço"],
+        "horas de servico": ["horas de servico","horas de serviço","horas","duracao","duração"],
+        "hora de entrada": ["hora de entrada","hora","inicio","início"],
+        "observacoes atendimento": ["observacoes atendimento","observações atendimento","obs atendimento"],
+        "observacoes prestador": ["observacoes prestador","observações prestador","obs prestador"],
+        "ponto de referencia": ["ponto de referencia","ponto de referência","referencia","referência"],
+        "#num prestador": ["#num prestador","id prestador","num prestador","numero prestador","n prestador"],
+        "prestador": ["prestador","nome prestador","profissional"]
+    }
+    
+    def pick(alias_list):
+        for a in alias_list:
+            if a in cols_norm:
+                return cols_norm[a]
+        return None
+    
+    col_mapped = {
+        "OS": pick(aliases["os"]),
+        "Status Serviço": pick(aliases["status servico"]),
+        "Data 1": pick(aliases["data 1"]),
+        "Plano": pick(aliases["plano"]),
+        "CPF/ CNPJ": pick(aliases["cpf/ cnpj"]),
+        "Cliente": pick(aliases["cliente"]),
+        "Serviço": pick(aliases["servico"]),
+        "Horas de serviço": pick(aliases["horas de servico"]),
+        "Hora de entrada": pick(aliases["hora de entrada"]),
+        "Observações atendimento": pick(aliases["observacoes atendimento"]),
+        "Observações prestador": pick(aliases["observacoes prestador"]),
+        "Ponto de Referencia": pick(aliases["ponto de referencia"]),
+        "#Num Prestador": pick(aliases["#num prestador"]),
+        "Prestador": pick(aliases["prestador"]),
+    }
+    
+    missing = [k for k,v in col_mapped.items() if v is None]
+    if missing:
+        raise ValueError(f"Colunas não encontradas na aba 'Atendimentos': {missing}")
+    
+    df_atendimentos = df_atendimentos[[v for v in col_mapped.values()]].rename(columns={v:k for k,v in col_mapped.items()})
 
     # ---- HISTÓRICO 60 DIAS ----
     hoje = datetime.now().date()
@@ -1196,3 +1237,4 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
