@@ -1,146 +1,66 @@
-#
+# -*- coding: utf-8 -*-
+# streamlit run app.py
 
-import streamlit as st
+import os
+import io
+import json
+import tempfile
+from collections import defaultdict
+from datetime import datetime, timedelta
+
 import pandas as pd
 import numpy as np
-import os
-from datetime import datetime, timedelta
+import streamlit as st
 from geopy.distance import geodesic
-import tempfile
-import io
-
-import smtplib
 from email.mime.text import MIMEText
+import smtplib
 
-PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"  # ou o nome correto do seu arquivo de clientes
-PORTAL_OS_LIST = "portal_atendimentos_os_list.json" # ou o nome correto da lista de OS (caso use JSON, por exemplo)
-
-
+# ==========================
+# Configurações / Constantes
+# ==========================
 st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
+
+PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
+PORTAL_OS_LIST = "portal_atendimentos_os_list.json"
 
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
 
+# Segurança: use variáveis de ambiente (não hardcode!)
+GMAIL_SENDER = os.getenv("GMAIL_SENDER", "")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
+GMAIL_TO = os.getenv("GMAIL_TO", "bh.savassi@vavive.com.br")
 
+APP_URL = "https://rotasvavive.streamlit.app"  # ajuste se necessário
 
-
-
-def enviar_email_aceite_gmail(os_id, profissional, telefone):
-    remetente = "andre.mtavares3@gmail.com"  # <-- seu e-mail de envio
-    senha = "3473010803474"        # <-- sua senha de app do Gmail
-    destinatario = "bh.savassi@vavive.com.br"
-
-    assunto = f"Novo aceite registrado | OS {os_id}"
-    corpo = f"""
-    Um novo aceite foi registrado:
-    
-    OS: {os_id}
-    Profissional: {profissional}
-    Telefone: {telefone}
-    Data/Hora: [inserir data/hora se quiser]
-    """
-
-    msg = MIMEText(corpo)
-    msg['Subject'] = assunto
-    msg['From'] = remetente
-    msg['To'] = destinatario
-
-    try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(remetente, senha)
-            smtp.sendmail(remetente, destinatario, msg.as_string())
-        print("Alerta de aceite enviado por e-mail!")
-    except Exception as e:
-        print("Erro ao enviar e-mail:", e)
-
-
-def exibe_formulario_aceite(os_id, origem=None):
-    st.header(f"Validação de Aceite (OS {os_id})")
-    profissional = st.text_input("Nome da Profissional")
-    telefone = st.text_input("Telefone para contato")
-    resposta = st.empty()  # para mensagem dinâmica
-
-    col1, col2 = st.columns(2)
-    aceite_submetido = False
-
-    with col1:
-        if st.button("Sim, aceito este atendimento"):
-            salvar_aceite(os_id, profissional, telefone, True, origem=origem)
-            resposta.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
-            aceite_submetido = True
-
-    with col2:
-        if st.button("Não posso aceitar"):
-            salvar_aceite(os_id, profissional, telefone, False, origem=origem)
-            resposta.success("✅ Obrigado! Fique de olho em novas oportunidades.")
-            aceite_submetido = True
-
-    if aceite_submetido:
-        st.stop()
-
-
-
-
-
-
-def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
-    agora = pd.Timestamp.now()
-    data = agora.strftime("%d/%m/%Y")
-    dia_semana = agora.strftime("%A")
-    horario = agora.strftime("%H:%M:%S")
-    if os.path.exists(ACEITES_FILE):
-        df = pd.read_excel(ACEITES_FILE)
-    else:
-        df = pd.DataFrame(columns=[
-            "OS", "Profissional", "Telefone", "Aceitou", 
-            "Data do Aceite", "Dia da Semana", "Horário do Aceite"
-        ])
-    nova_linha = {
-        "OS": os_id,
-        "Profissional": profissional,
-        "Telefone": telefone,
-        "Aceitou": "Sim" if aceitou else "Não",
-        "Data do Aceite": data,
-        "Dia da Semana": dia_semana,
-        "Horário do Aceite": horario,
-        "Origem": origem if origem else ""
-    }
-    df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
-    df.to_excel(ACEITES_FILE, index=False)
-# >>> Envio de alerta por e-mail <<<
-    enviar_email_aceite_gmail(os_id, profissional, telefone)
-
-aceite_os = st.query_params.get("aceite", None)
-origem_aceite = st.query_params.get("origem", None)
-
-if aceite_os:
-    # Passe a origem para o formulário de aceite
-    exibe_formulario_aceite(aceite_os, origem=origem_aceite)
-    st.stop()
-
+# ==========================
+# Utilidades gerais
+# ==========================
 def traduzir_dia_semana(date_obj):
     dias_pt = {
         "Monday": "segunda-feira", "Tuesday": "terça-feira", "Wednesday": "quarta-feira",
         "Thursday": "quinta-feira", "Friday": "sexta-feira", "Saturday": "sábado", "Sunday": "domingo"
     }
-    return dias_pt[date_obj.strftime('%A')]
+    return dias_pt.get(date_obj.strftime('%A'), "")
 
 def formatar_nome_simples(nome):
-    nome = nome.strip()
+    nome = str(nome or "").strip()
     nome = nome.replace("CI ", "").replace("Ci ", "").replace("C i ", "").replace("C I ", "")
     partes = nome.split()
+    if not partes:
+        return ""
     if partes[0].lower() in ['ana', 'maria'] and len(partes) > 1:
         return " ".join(partes[:2])
-    else:
-        return partes[0]
+    return partes[0]
 
 def gerar_mensagem_personalizada(
     nome_profissional, nome_cliente, data_servico, servico,
     duracao, rua, numero, complemento, bairro, cidade, latitude, longitude,
-    ja_atendeu, hora_entrada, obs_prestador 
+    ja_atendeu, hora_entrada, obs_prestador
 ):
     nome_profissional_fmt = formatar_nome_simples(nome_profissional)
-    nome_cliente_fmt = nome_cliente.split()[0].strip().title()
+    nome_cliente_fmt = str(nome_cliente).split()[0].strip().title()
+
     if isinstance(data_servico, str):
         data_dt = pd.to_datetime(data_servico, dayfirst=True, errors="coerce")
     else:
@@ -152,40 +72,43 @@ def gerar_mensagem_personalizada(
         dia_semana = traduzir_dia_semana(data_dt)
         data_formatada = data_dt.strftime("%d/%m/%Y")
     data_linha = f"{dia_semana}, {data_formatada}"
-    endereco_str = f"{rua}, {numero}"
+
+    endereco_str = f"{rua}, {numero}".strip().strip(",")
     if complemento and str(complemento).strip().lower() not in ["nan", "none", "-"]:
         endereco_str += f", {complemento}"
+
     if pd.notnull(latitude) and pd.notnull(longitude):
         maps_url = f"https://maps.google.com/?q={latitude},{longitude}"
     else:
         maps_url = ""
+
     fechamento = (
         "SIM ou NÃO para o aceite!" if ja_atendeu
         else "Acesse o link ao final da mensagem e responda com SIM caso tenha disponibilidade!"
     )
-    rodape = """
-O atendimento será confirmado após o aceite!
-*1)*    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
-*2)*    Lembre-se das nossas  confirmações do atendimento!
-
-Abs, Vavivê!
-"""
-    mensagem = f"""Olá, Tudo bem com você?
-Temos uma oportunidade especial para você dentro da sua rota!
-*Cliente:* {nome_cliente_fmt}
-📅 *Data:* {data_linha}
-🛠️ *Serviço:* {servico}
-🕒 *Hora de entrada:* {hora_entrada}
-⏱️ *Duração do Atendimento:* {duracao}
-📍 *Endereço:* {endereco_str}
-📍 *Bairro:* {bairro}
-🏙️ *Cidade:* {cidade}
-💬 *Observações do Atendimento:* {obs_prestador}
-*GOOGLE MAPAS* {"🌎 (" + maps_url + ")" if maps_url else ""}
-{fechamento}
-{rodape}
-"""
-    return mensagem
+    rodape = (
+        "\nO atendimento será confirmado após o aceite!\n"
+        "*1)*    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.\n"
+        "*2)*    Lembre-se das nossas  confirmações do atendimento!\n\n"
+        "Abs, Vavivê!\n"
+    )
+    msg = (
+        "Olá, Tudo bem com você?\n"
+        "Temos uma oportunidade especial para você dentro da sua rota!\n"
+        f"*Cliente:* {nome_cliente_fmt}\n"
+        f"📅 *Data:* {data_linha}\n"
+        f"🛠️ *Serviço:* {servico}\n"
+        f"🕒 *Hora de entrada:* {hora_entrada}\n"
+        f"⏱️ *Duração do Atendimento:* {duracao}\n"
+        f"📍 *Endereço:* {endereco_str}\n"
+        f"📍 *Bairro:* {bairro}\n"
+        f"🏙️ *Cidade:* {cidade}\n"
+        f"💬 *Observações do Atendimento:* {obs_prestador}\n"
+        f"*GOOGLE MAPAS* {'🌎 (' + maps_url + ')' if maps_url else ''}\n"
+        f"{fechamento}\n"
+        f"{rodape}"
+    )
+    return msg
 
 def padronizar_cpf_cnpj(coluna):
     return (
@@ -199,15 +122,46 @@ def salvar_df(df, nome_arquivo, output_dir):
     caminho = os.path.join(output_dir, f"{nome_arquivo}.xlsx")
     df.to_excel(caminho, index=False)
 
+def enviar_email_aceite_gmail(os_id, profissional, telefone):
+    # Só envia se variáveis de ambiente estiverem ajustadas
+    if not (GMAIL_SENDER and GMAIL_APP_PASSWORD and GMAIL_TO):
+        return
+    assunto = f"Novo aceite registrado | OS {os_id}"
+    corpo = f"""
+Um novo aceite foi registrado:
+
+OS: {os_id}
+Profissional: {profissional}
+Telefone: {telefone}
+Data/Hora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+"""
+    msg = MIMEText(corpo)
+    msg['Subject'] = assunto
+    msg['From'] = GMAIL_SENDER
+    msg['To'] = GMAIL_TO
+
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(GMAIL_SENDER, GMAIL_APP_PASSWORD)
+            smtp.sendmail(GMAIL_SENDER, GMAIL_TO, msg.as_string())
+    except Exception as e:
+        print("Erro ao enviar e-mail:", e)
+
+# ==========================
+# Pipeline principal
+# ==========================
 def pipeline(file_path, output_dir):
     import xlsxwriter
+
+    # ---- CLIENTES ----
     df_clientes_raw = pd.read_excel(file_path, sheet_name="Clientes")
     df_clientes = df_clientes_raw[[
         "ID","UpdatedAt","celular","cpf",
         "endereco-1-bairro","endereco-1-cidade","endereco-1-complemento",
         "endereco-1-estado","endereco-1-latitude","endereco-1-longitude",
-        "endereco-1-numero","endereco-1-rua","nome"
+        "endereco-1-numero","endereco-1-rua","nome","OS","Serviço","Horas de serviço","Hora de entrada","Ponto de Referencia","Cliente","Data 1","Bairro"
     ]].copy()
+
     df_clientes["ID Cliente"] = (
         df_clientes["ID"].fillna("0").astype(str)
         .str.replace(r"\.0$", "", regex=True).str.strip()
@@ -217,6 +171,7 @@ def pipeline(file_path, output_dir):
     df_clientes["Complemento"] = df_clientes["endereco-1-complemento"].astype(str).str.strip()
     df_clientes["Número"] = df_clientes["endereco-1-numero"].astype(str).str.strip()
     df_clientes["Nome Cliente"] = df_clientes["nome"].astype(str).str.strip()
+
     df_clientes = df_clientes.rename(columns={
         "endereco-1-bairro": "Bairro",
         "endereco-1-cidade": "Cidade",
@@ -227,21 +182,26 @@ def pipeline(file_path, output_dir):
     })
     df_clientes["Latitude Cliente"] = pd.to_numeric(df_clientes["Latitude Cliente"], errors="coerce")
     df_clientes["Longitude Cliente"] = pd.to_numeric(df_clientes["Longitude Cliente"], errors="coerce")
+
     coord_invertida = df_clientes["Latitude Cliente"] < -40
     if coord_invertida.any():
         lat_temp = df_clientes.loc[coord_invertida, "Latitude Cliente"].copy()
         df_clientes.loc[coord_invertida, "Latitude Cliente"] = df_clientes.loc[coord_invertida, "Longitude Cliente"]
         df_clientes.loc[coord_invertida, "Longitude Cliente"] = lat_temp
+
     df_clientes["coordenadas_validas"] = df_clientes["Latitude Cliente"].notnull() & df_clientes["Longitude Cliente"].notnull()
     df_clientes = df_clientes.sort_values(by=["CPF_CNPJ", "coordenadas_validas"], ascending=[True, False])
     df_clientes = df_clientes.drop_duplicates(subset="CPF_CNPJ", keep="first")
     df_clientes.drop(columns=["coordenadas_validas"], inplace=True)
+
     df_clientes = df_clientes[[
         "ID Cliente","UpdatedAt","Celular","CPF_CNPJ",
         "Bairro","Cidade","Complemento","Estado","Latitude Cliente","Longitude Cliente",
         "Número","Rua","Nome Cliente"
     ]]
     salvar_df(df_clientes, "df_clientes", output_dir)
+
+    # ---- PROFISSIONAIS ----
     df_profissionais_raw = pd.read_excel(file_path, sheet_name="Profissionais")
     df_profissionais = df_profissionais_raw[[
         "ID","atendimentos_feitos","celular","cpf",
@@ -268,12 +228,12 @@ def pipeline(file_path, output_dir):
         "endereco-longitude": "Longitude Profissional",
         "endereco-rua": "Rua"
     })
-    df_profissionais = df_profissionais[~df_profissionais["Nome Prestador"].str.contains("inativo", case=False, na=False)].copy()
+    mask_inativo = df_profissionais["Nome Prestador"].astype(str).str.contains("inativo", case=False, na=False)
+    df_profissionais = df_profissionais[~mask_inativo].copy()
     df_profissionais["Latitude Profissional"] = pd.to_numeric(df_profissionais["Latitude Profissional"], errors="coerce")
     df_profissionais["Longitude Profissional"] = pd.to_numeric(df_profissionais["Longitude Profissional"], errors="coerce")
     df_profissionais = df_profissionais[
-        df_profissionais["Latitude Profissional"].notnull() &
-        df_profissionais["Longitude Profissional"].notnull()
+        df_profissionais["Latitude Profissional"].notnull() & df_profissionais["Longitude Profissional"].notnull()
     ].copy()
     df_profissionais = df_profissionais[[
         "ID Prestador","Qtd Atendimentos","Celular","cpf",
@@ -281,10 +241,10 @@ def pipeline(file_path, output_dir):
         "Número","Rua","Nome Prestador"
     ]]
     salvar_df(df_profissionais, "df_profissionais", output_dir)
+
+    # ---- PREFERÊNCIAS ----
     df_preferencias_raw = pd.read_excel(file_path, sheet_name="Preferencias")
-    df_preferencias = df_preferencias_raw[[
-        "CPF/CNPJ","Cliente","ID Profissional","Prestador"
-    ]].copy()
+    df_preferencias = df_preferencias_raw[["CPF/CNPJ","Cliente","ID Profissional","Prestador"]].copy()
     df_preferencias["CPF_CNPJ"] = padronizar_cpf_cnpj(df_preferencias["CPF/CNPJ"])
     df_preferencias["Nome Cliente"] = df_preferencias["Cliente"].astype(str).str.strip()
     df_preferencias["ID Prestador"] = (
@@ -292,14 +252,12 @@ def pipeline(file_path, output_dir):
         .str.replace(r"\.0$", "", regex=True).str.strip()
     )
     df_preferencias["Nome Prestador"] = df_preferencias["Prestador"].astype(str).str.strip()
-    df_preferencias = df_preferencias[[
-        "CPF_CNPJ","Nome Cliente","ID Prestador","Nome Prestador"
-    ]]
+    df_preferencias = df_preferencias[["CPF_CNPJ","Nome Cliente","ID Prestador","Nome Prestador"]]
     salvar_df(df_preferencias, "df_preferencias", output_dir)
+
+    # ---- BLOQUEIO ----
     df_bloqueio_raw = pd.read_excel(file_path, sheet_name="Bloqueio")
-    df_bloqueio = df_bloqueio_raw[[
-        "CPF/CNPJ","Cliente","ID Profissional","Prestador"
-    ]].copy()
+    df_bloqueio = df_bloqueio_raw[["CPF/CNPJ","Cliente","ID Profissional","Prestador"]].copy()
     df_bloqueio["CPF_CNPJ"] = padronizar_cpf_cnpj(df_bloqueio["CPF/CNPJ"])
     df_bloqueio["Nome Cliente"] = df_bloqueio["Cliente"].astype(str).str.strip()
     df_bloqueio["ID Prestador"] = (
@@ -307,14 +265,12 @@ def pipeline(file_path, output_dir):
         .str.replace(r"\.0$", "", regex=True).str.strip()
     )
     df_bloqueio["Nome Prestador"] = df_bloqueio["Prestador"].astype(str).str.strip()
-    df_bloqueio = df_bloqueio[[
-        "CPF_CNPJ","Nome Cliente","ID Prestador","Nome Prestador"
-    ]]
+    df_bloqueio = df_bloqueio[["CPF_CNPJ","Nome Cliente","ID Prestador","Nome Prestador"]]
     salvar_df(df_bloqueio, "df_bloqueio", output_dir)
+
+    # ---- QUERIDINHOS / SUMIDINHOS ----
     df_queridinhos_raw = pd.read_excel(file_path, sheet_name="Profissionais Preferenciais")
-    df_queridinhos = df_queridinhos_raw[[
-        "ID Profissional","Profissional"
-    ]].copy()
+    df_queridinhos = df_queridinhos_raw[["ID Profissional","Profissional"]].copy()
     df_queridinhos["ID Prestador"] = (
         df_queridinhos["ID Profissional"].fillna("0").astype(str)
         .str.replace(r"\.0$", "", regex=True).str.strip()
@@ -322,10 +278,9 @@ def pipeline(file_path, output_dir):
     df_queridinhos["Nome Prestador"] = df_queridinhos["Profissional"].astype(str).str.strip()
     df_queridinhos = df_queridinhos[["ID Prestador","Nome Prestador"]]
     salvar_df(df_queridinhos, "df_queridinhos", output_dir)
+
     df_sumidinhos_raw = pd.read_excel(file_path, sheet_name="Baixa Disponibilidade")
-    df_sumidinhos = df_sumidinhos_raw[[
-        "ID Profissional","Profissional"
-    ]].copy()
+    df_sumidinhos = df_sumidinhos_raw[["ID Profissional","Profissional"]].copy()
     df_sumidinhos["ID Prestador"] = (
         df_sumidinhos["ID Profissional"].fillna("0").astype(str)
         .str.replace(r"\.0$", "", regex=True).str.strip()
@@ -333,6 +288,8 @@ def pipeline(file_path, output_dir):
     df_sumidinhos["Nome Prestador"] = df_sumidinhos["Profissional"].astype(str).str.strip()
     df_sumidinhos = df_sumidinhos[["ID Prestador","Nome Prestador"]]
     salvar_df(df_sumidinhos, "df_sumidinhos", output_dir)
+
+    # ---- ATENDIMENTOS ----
     df_atendimentos = pd.read_excel(file_path, sheet_name="Atendimentos")
     colunas_desejadas = [
         "OS","Status Serviço","Data 1","Plano","CPF/ CNPJ","Cliente","Serviço",
@@ -349,6 +306,8 @@ def pipeline(file_path, output_dir):
         .str.replace(r"\.0$", "", regex=True).str.strip()
     )
     salvar_df(df_atendimentos, "df_atendimentos", output_dir)
+
+    # ---- HISTÓRICO 60 DIAS ----
     hoje = datetime.now().date()
     limite = hoje - timedelta(days=60)
     data1_datetime = pd.to_datetime(df_atendimentos["Data 1"], errors="coerce")
@@ -362,16 +321,21 @@ def pipeline(file_path, output_dir):
         "Duração do Serviço","Hora de entrada","ID Prestador","Prestador", "Observações prestador"
     ]]
     salvar_df(df_historico_60_dias, "df_historico_60_dias", output_dir)
+
     df_cliente_prestador = df_historico_60_dias.groupby(
         ["CPF_CNPJ","ID Prestador"]
     ).size().reset_index(name="Qtd Atendimentos Cliente-Prestador")
     salvar_df(df_cliente_prestador, "df_cliente_prestador", output_dir)
+
     df_qtd_por_prestador = df_historico_60_dias.groupby(
         "ID Prestador"
     ).size().reset_index(name="Qtd Atendimentos Prestador")
     salvar_df(df_qtd_por_prestador, "df_qtd_por_prestador", output_dir)
+
+    # ---- GEO DISTÂNCIAS ----
     df_clientes_coord = df_clientes[["CPF_CNPJ","Latitude Cliente","Longitude Cliente"]].dropna().drop_duplicates("CPF_CNPJ")
     df_profissionais_coord = df_profissionais[["ID Prestador","Latitude Profissional","Longitude Profissional"]].dropna().drop_duplicates("ID Prestador")
+
     distancias = []
     for _, cliente in df_clientes_coord.iterrows():
         coord_cliente = (cliente["Latitude Cliente"], cliente["Longitude Cliente"])
@@ -387,36 +351,32 @@ def pipeline(file_path, output_dir):
     df_distancias_alerta = df_distancias[df_distancias["Distância (km)"] > 1000]
     salvar_df(df_distancias_alerta, "df_distancias_alerta", output_dir)
     salvar_df(df_distancias, "df_distancias", output_dir)
-    df_preferencias_completo = df_preferencias.merge(
-        df_clientes_coord, on="CPF_CNPJ", how="left"
-    ).merge(
-        df_profissionais_coord, on="ID Prestador", how="left"
-    )
+
+    # ---- Geo para preferências e bloqueios (auditoria) ----
+    df_preferencias_completo = df_preferencias.merge(df_clientes_coord, on="CPF_CNPJ", how="left") \
+                                              .merge(df_profissionais_coord, on="ID Prestador", how="left")
     df_preferencias_completo = df_preferencias_completo[[
         "CPF_CNPJ","Nome Cliente","ID Prestador","Nome Prestador",
-        "Latitude Cliente","Longitude Cliente",
-        "Latitude Profissional","Longitude Profissional"
+        "Latitude Cliente","Longitude Cliente","Latitude Profissional","Longitude Profissional"
     ]]
     salvar_df(df_preferencias_completo, "df_preferencias_completo", output_dir)
-    df_bloqueio_completo = df_bloqueio.merge(
-        df_clientes_coord, on="CPF_CNPJ", how="left"
-    ).merge(
-        df_profissionais_coord, on="ID Prestador", how="left"
-    )
+
+    df_bloqueio_completo = df_bloqueio.merge(df_clientes_coord, on="CPF_CNPJ", how="left") \
+                                      .merge(df_profissionais_coord, on="ID Prestador", how="left")
     df_bloqueio_completo = df_bloqueio_completo[[
         "CPF_CNPJ","Nome Cliente","ID Prestador","Nome Prestador",
-        "Latitude Cliente","Longitude Cliente",
-        "Latitude Profissional","Longitude Profissional"
+        "Latitude Cliente","Longitude Cliente","Latitude Profissional","Longitude Profissional"
     ]]
     salvar_df(df_bloqueio_completo, "df_bloqueio_completo", output_dir)
+
+    # ---- FUTUROS (válidos p/ matriz) ----
     ontem = datetime.now().date() - timedelta(days=1)
     df_futuros = df_atendimentos[
         (df_atendimentos["Status Serviço"].str.lower() != "cancelado") &
         (df_atendimentos["Data 1"].dt.date > ontem)
     ].copy()
-    df_futuros_com_clientes = df_futuros.merge(
-        df_clientes_coord, on="CPF_CNPJ", how="left"
-    )
+    df_futuros_com_clientes = df_futuros.merge(df_clientes_coord, on="CPF_CNPJ", how="left")
+
     colunas_uteis = [
         "OS","Data 1","Status Serviço","CPF_CNPJ","Cliente","Serviço",
         "Duração do Serviço","Hora de entrada","Ponto de Referencia",
@@ -427,51 +387,88 @@ def pipeline(file_path, output_dir):
         df_futuros_com_clientes["Longitude Cliente"].notnull()
     ][colunas_uteis].copy()
     salvar_df(df_atendimentos_futuros_validos, "df_atendimentos_futuros_validos", output_dir)
+
     df_atendimentos_sem_localizacao = df_futuros_com_clientes[
         df_futuros_com_clientes["Latitude Cliente"].isnull() |
         df_futuros_com_clientes["Longitude Cliente"].isnull()
     ][colunas_uteis].copy()
     salvar_df(df_atendimentos_sem_localizacao, "df_atendimentos_sem_localizacao", output_dir)
-    df_clientes.to_pickle('df_clientes.pkl')
-    df_profissionais.to_pickle('df_profissionais.pkl')
-    df_preferencias.to_pickle('df_preferencias.pkl')
-    df_bloqueio.to_pickle('df_bloqueio.pkl')
-    df_queridinhos.to_pickle('df_queridinhos.pkl')
-    df_sumidinhos.to_pickle('df_sumidinhos.pkl')
-    df_atendimentos.to_pickle('df_atendimentos.pkl')
-    df_historico_60_dias.to_pickle('df_historico_60_dias.pkl')
-    df_cliente_prestador.to_pickle('df_cliente_prestador.pkl')
-    df_qtd_por_prestador.to_pickle('df_qtd_por_prestador.pkl')
-    df_distancias.to_pickle('df_distancias.pkl')
-    df_preferencias_completo.to_pickle('df_preferencias_completo.pkl')
-    df_bloqueio_completo.to_pickle('df_bloqueio_completo.pkl')
-    df_atendimentos_futuros_validos.to_pickle('df_atendimentos_futuros_validos.pkl')
-    df_atendimentos_sem_localizacao.to_pickle('df_atendimentos_sem_localizacao.pkl')
-    df_distancias_alerta.to_pickle('df_distancias_alerta.pkl')
 
+    # ------------------------------------------------------------
+    # ### (NOVO) PRÉ-ALOCAÇÃO DE PREFERIDAS DO DIA (com desempate)
+    # ------------------------------------------------------------
+    def _parse_hora(hora_str):
+        try:
+            s = str(hora_str).strip()
+            h, m = s.split(":")
+            return (int(h), int(m))
+        except Exception:
+            return (99, 99)
 
+    preferida_do_cliente_no_dia = defaultdict(dict)      # {date: {cpf: id_prof}}
+    profissionais_reservadas_no_dia = defaultdict(set)   # {date: {id_prof, ...}}
 
+    pref_map = df_preferencias.set_index("CPF_CNPJ")["ID Prestador"].astype(str).str.strip().to_dict()
 
+    for data_atendimento, df_do_dia in df_atendimentos_futuros_validos.groupby(df_atendimentos_futuros_validos["Data 1"].dt.date):
+        candidatos = []
+        for _, row in df_do_dia.iterrows():
+            cpf = row["CPF_CNPJ"]
+            id_pref = pref_map.get(cpf, "")
+            if not id_pref:
+                continue
+            # bloqueado?
+            bloqueados = (
+                df_bloqueio_completo[df_bloqueio_completo["CPF_CNPJ"] == cpf]["ID Prestador"]
+                .astype(str).str.strip().tolist()
+            )
+            if id_pref in bloqueados:
+                continue
+            # pro existente, ativo e com geo
+            prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_pref]
+            if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
+                continue
+            if pd.isnull(prof.iloc[0]["Latitude Profissional"]) or pd.isnull(prof.iloc[0]["Longitude Profissional"]):
+                continue
 
+            # métricas p/ desempate
+            hist_cli = df_cliente_prestador[
+                (df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == id_pref)
+            ]
+            qtd_cli = int(hist_cli["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not hist_cli.empty else 0
+            dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == id_pref)]
+            dist_km = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else 9999.0
+            hora = _parse_hora(row.get("Hora de entrada", ""))
 
+            candidatos.append({"cpf": cpf, "id_prof": id_pref, "qtd_cli": qtd_cli, "dist_km": dist_km, "hora": hora})
 
-    
-    from collections import defaultdict
+        if not candidatos:
+            continue
 
-    # --- Passo 1: Pré-varredura - mapeia todas as preferidas do cliente por data ---
-    preferidas_alocadas_dia = defaultdict(dict)  # {data: {id_profissional: cpf_cliente}}
-    for _, atendimento in df_atendimentos_futuros_validos.iterrows():
-        data_atendimento = atendimento["Data 1"].date()
-        cpf = atendimento["CPF_CNPJ"]
-        preferencia_cliente_df = df_preferencias[df_preferencias["CPF_CNPJ"] == cpf]
-        if not preferencia_cliente_df.empty:
-            id_preferida_temp = str(preferencia_cliente_df.iloc[0]["ID Prestador"]).strip()
-            if id_preferida_temp:
-                preferidas_alocadas_dia[data_atendimento][id_preferida_temp] = cpf
-    
-    # --- Passo 2: Para cada atendimento, monta as sugestões respeitando o bloqueio ---
+        by_prof = defaultdict(list)
+        for c in candidatos:
+            by_prof[c["id_prof"]].append(c)
+
+        for id_prof, lst in by_prof.items():
+            lst.sort(key=lambda x: (-x["qtd_cli"], x["dist_km"], x["hora"]))
+            escolhido = lst[0]
+            preferida_do_cliente_no_dia[data_atendimento][escolhido["cpf"]] = id_prof
+            profissionais_reservadas_no_dia[data_atendimento].add(id_prof)
+
+    # ------------------------------------------------------------
+    # Montagem da MATRIZ DE ROTAS (com o bloqueio diário aplicado)
+    # ------------------------------------------------------------
+    def _reservada_para_outro(data_atendimento, id_prof, cpf):
+        # true se id_prof está reservada e NÃO é para este cpf
+        cpf_reserva = None
+        for _cpf, _id in preferida_do_cliente_no_dia[data_atendimento].items():
+            if str(_id) == str(id_prof):
+                cpf_reserva = _cpf
+                break
+        return (id_prof in profissionais_reservadas_no_dia[data_atendimento]) and (cpf_reserva != cpf)
+
     matriz_resultado_corrigida = []
-    
+
     for _, atendimento in df_atendimentos_futuros_validos.iterrows():
         data_atendimento = atendimento["Data 1"].date()
         os_id = atendimento["OS"]
@@ -483,13 +480,22 @@ def pipeline(file_path, output_dir):
         hora_entrada = atendimento["Hora de entrada"]
         obs_prestador = atendimento["Observações prestador"]
         ponto_referencia = atendimento["Ponto de Referencia"]
-        lat_cliente = atendimento["Latitude Cliente"]
-        lon_cliente = atendimento["Longitude Cliente"]
         plano = atendimento.get("Plano", "")
         bloqueados = (
             df_bloqueio_completo[df_bloqueio_completo["CPF_CNPJ"] == cpf]["ID Prestador"]
             .astype(str).str.strip().tolist()
         )
+
+        # dados do cliente (para mensagem)
+        cliente_match = df_clientes[df_clientes["CPF_CNPJ"] == cpf]
+        if not cliente_match.empty:
+            cliente_info = cliente_match.iloc[0]
+            rua = cliente_info["Rua"]; numero = cliente_info["Número"]; complemento = cliente_info["Complemento"]
+            bairro = cliente_info["Bairro"]; cidade = cliente_info["Cidade"]
+            latitude = cliente_info["Latitude Cliente"]; longitude = cliente_info["Longitude Cliente"]
+        else:
+            rua = numero = complemento = bairro = cidade = latitude = longitude = ""
+
         linha = {
             "OS": os_id,
             "CPF_CNPJ": cpf,
@@ -500,134 +506,100 @@ def pipeline(file_path, output_dir):
             "Duração do Serviço": duracao_servico,
             "Hora de entrada": hora_entrada,
             "Observações prestador": obs_prestador,
-            "Ponto de Referencia": ponto_referencia
+            "Ponto de Referencia": ponto_referencia,
         }
-        cliente_match = df_clientes[df_clientes["CPF_CNPJ"] == cpf]
-        cliente_info = cliente_match.iloc[0] if not cliente_match.empty else None
-        if cliente_info is not None:
-            rua = cliente_info["Rua"]
-            numero = cliente_info["Número"]
-            complemento = cliente_info["Complemento"]
-            bairro = cliente_info["Bairro"]
-            cidade = cliente_info["Cidade"]
-            latitude = cliente_info["Latitude Cliente"]
-            longitude = cliente_info["Longitude Cliente"]
-        else:
-            rua = numero = complemento = bairro = cidade = latitude = longitude = ""
         linha["Mensagem Padrão"] = gerar_mensagem_personalizada(
-            "PROFISSIONAL",
-            nome_cliente, data_1, servico,
-            duracao_servico, rua, numero, complemento, bairro, cidade,
-            latitude, longitude, ja_atendeu=False,
-            hora_entrada=hora_entrada, 
-            obs_prestador=obs_prestador
+            "PROFISSIONAL", nome_cliente, data_1, servico, duracao_servico,
+            rua, numero, complemento, bairro, cidade, latitude, longitude,
+            ja_atendeu=False, hora_entrada=hora_entrada, obs_prestador=obs_prestador
         )
+
         utilizados = set()
         col = 1
-    
-        # --- BLOQUEIO das preferidas do dia ---
-        preferidas_bloqueadas = set(preferidas_alocadas_dia[data_atendimento].keys())
-    
-        # ----------- 1️⃣ PREFERÊNCIA DO CLIENTE -----------
-        preferencia_cliente_df = df_preferencias[df_preferencias["CPF_CNPJ"] == cpf]
-        preferida_id = None
-        if not preferencia_cliente_df.empty:
-            id_preferida_temp = str(preferencia_cliente_df.iloc[0]["ID Prestador"]).strip()
-            profissional_preferida_info = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_preferida_temp]
-            if (
-                not profissional_preferida_info.empty
-                and id_preferida_temp not in bloqueados
-                and pd.notnull(profissional_preferida_info.iloc[0]["Latitude Profissional"])
-                and pd.notnull(profissional_preferida_info.iloc[0]["Longitude Profissional"])
-                and "inativo" not in profissional_preferida_info.iloc[0]["Nome Prestador"].lower()
-                and preferidas_alocadas_dia[data_atendimento].get(id_preferida_temp) == cpf
-            ):
-                preferida_id = id_preferida_temp
-                nome_prof = profissional_preferida_info.iloc[0]["Nome Prestador"]
-                celular = profissional_preferida_info.iloc[0]["Celular"]
-                qtd_atend_cliente_pref = df_cliente_prestador[
-                    (df_cliente_prestador["CPF_CNPJ"] == cpf) &
-                    (df_cliente_prestador["ID Prestador"] == preferida_id)
-                ]["Qtd Atendimentos Cliente-Prestador"]
-                qtd_atend_cliente_pref = int(qtd_atend_cliente_pref.iloc[0]) if not qtd_atend_cliente_pref.empty else 0
-                qtd_atend_total_pref = df_qtd_por_prestador[
-                    df_qtd_por_prestador["ID Prestador"] == preferida_id
-                ]["Qtd Atendimentos Prestador"]
-                qtd_atend_total_pref = int(qtd_atend_total_pref.iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == preferida_id].empty else 0
-                distancia_pref_df = df_distancias[
-                    (df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == preferida_id)
-                ]
-                distancia_pref = float(distancia_pref_df["Distância (km)"].iloc[0]) if not distancia_pref_df.empty else None
-                criterio = f"cliente: {qtd_atend_cliente_pref} | total: {qtd_atend_total_pref} — {distancia_pref:.2f} km" if distancia_pref is not None else ""
-                linha[f"Classificação da Profissional {col}"] = col
-                linha[f"Critério {col}"] = criterio
-                linha[f"Nome Prestador {col}"] = nome_prof
-                linha[f"Celular {col}"] = celular
-                linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                    nome_prof, nome_cliente, data_1, servico,
-                    duracao_servico, rua, numero, complemento, bairro, cidade,
-                    latitude, longitude, ja_atendeu=True,
-                    hora_entrada=hora_entrada,
-                    obs_prestador=obs_prestador
-                )
-                linha[f"Critério Utilizado {col}"] = "Preferência do Cliente"
-                utilizados.add(preferida_id)
-                col += 1
-    
-        # ----------- 2️⃣ MAIS ATENDEU O CLIENTE -----------
+
+        # ---------- 1) Preferência do cliente (com reserva diária aplicada) ----------
+        preferida_id = preferida_do_cliente_no_dia[data_atendimento].get(cpf)
+        if preferida_id and (preferida_id not in bloqueados):
+            prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == str(preferida_id)]
+            if not prof.empty and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
+                lat_prof = prof.iloc[0]["Latitude Profissional"]; lon_prof = prof.iloc[0]["Longitude Profissional"]
+                if pd.notnull(lat_prof) and pd.notnull(lon_prof):
+                    qtd_atend_cliente_pref = df_cliente_prestador[
+                        (df_cliente_prestador["CPF_CNPJ"] == cpf) &
+                        (df_cliente_prestador["ID Prestador"] == preferida_id)
+                    ]["Qtd Atendimentos Cliente-Prestador"]
+                    qtd_atend_cliente_pref = int(qtd_atend_cliente_pref.iloc[0]) if not qtd_atend_cliente_pref.empty else 0
+                    qtd_atend_total_pref = df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == preferida_id]["Qtd Atendimentos Prestador"]
+                    qtd_atend_total_pref = int(qtd_atend_total_pref.iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == preferida_id].empty else 0
+                    dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == preferida_id)]
+                    distancia_pref = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else None
+                    criterio = f"cliente: {qtd_atend_cliente_pref} | total: {qtd_atend_total_pref} — {distancia_pref:.2f} km" if distancia_pref is not None else ""
+                    linha[f"Classificação da Profissional {col}"] = col
+                    linha[f"Critério {col}"] = criterio
+                    linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
+                    linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
+                    linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+                        prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
+                        duracao_servico, rua, numero, complemento, bairro, cidade,
+                        latitude, longitude, ja_atendeu=True, hora_entrada=hora_entrada, obs_prestador=obs_prestador
+                    )
+                    linha[f"Critério Utilizado {col}"] = "Preferência do Cliente"
+                    utilizados.add(str(preferida_id))
+                    col += 1
+
+        # conjunto de reservadas (para este dia)
+        reservadas_dia = set(map(str, profissionais_reservadas_no_dia[data_atendimento]))
+
+        # helper para checar se ID está reservada para outro CPF
+        def _bloqueada_por_reserva(id_prof):
+            return _reservada_para_outro(data_atendimento, str(id_prof), cpf)
+
+        # ---------- 2) Quem mais atendeu o cliente ----------
         df_mais_atendeu = df_cliente_prestador[df_cliente_prestador["CPF_CNPJ"] == cpf]
         if not df_mais_atendeu.empty:
             mais_atend = df_mais_atendeu["Qtd Atendimentos Cliente-Prestador"].max()
-            mais_atendeu_ids = df_mais_atendeu[df_mais_atendeu["Qtd Atendimentos Cliente-Prestador"] == mais_atend]["ID Prestador"]
-            for id_ in mais_atendeu_ids:
+            mais_ids = df_mais_atendeu[df_mais_atendeu["Qtd Atendimentos Cliente-Prestador"] == mais_atend]["ID Prestador"]
+            for id_ in mais_ids:
                 id_prof = str(id_)
-                if (
-                    id_prof in utilizados or id_prof in bloqueados or
-                    (id_prof in preferidas_bloqueadas and preferidas_alocadas_dia[data_atendimento][id_prof] != cpf)
-                ):
+                if id_prof in utilizados or id_prof in map(str, bloqueados) or _bloqueada_por_reserva(id_prof):
                     continue
                 prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_prof]
-                if not prof.empty:
-                    lat_prof = prof.iloc[0]["Latitude Profissional"]
-                    lon_prof = prof.iloc[0]["Longitude Profissional"]
-                    if pd.notnull(lat_prof) and pd.notnull(lon_prof) and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
-                        qtd_atend_cliente = int(mais_atend)
-                        qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof].empty else 0
-                        distancia = float(df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == id_prof)]["Distância (km)"].iloc[0]) if not df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == id_prof)].empty else None
-                        criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km" if distancia is not None else ""
-                        linha[f"Classificação da Profissional {col}"] = col
-                        linha[f"Critério {col}"] = criterio
-                        linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
-                        linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-                        linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                            prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
-                            duracao_servico, rua, numero, complemento, bairro, cidade,
-                            latitude, longitude, ja_atendeu=True,
-                            hora_entrada=hora_entrada,
-                            obs_prestador=obs_prestador
-                        )
-                        linha[f"Critério Utilizado {col}"] = "Mais atendeu o cliente"
-                        utilizados.add(id_prof)
-                        col += 1
-    
-        # ----------- 3️⃣ ÚLTIMO PROFISSIONAL -----------
+                if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
+                    continue
+                lat_prof = prof.iloc[0]["Latitude Profissional"]; lon_prof = prof.iloc[0]["Longitude Profissional"]
+                if pd.notnull(lat_prof) and pd.notnull(lon_prof):
+                    qtd_atend_cliente = int(mais_atend)
+                    qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof].empty else 0
+                    dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == id_prof)]
+                    distancia = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else None
+                    criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km" if distancia is not None else ""
+                    linha[f"Classificação da Profissional {col}"] = col
+                    linha[f"Critério {col}"] = criterio
+                    linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
+                    linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
+                    linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+                        prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
+                        duracao_servico, rua, numero, complemento, bairro, cidade,
+                        latitude, longitude, ja_atendeu=True, hora_entrada=hora_entrada, obs_prestador=obs_prestador
+                    )
+                    linha[f"Critério Utilizado {col}"] = "Mais atendeu o cliente"
+                    utilizados.add(id_prof)
+                    col += 1
+
+        # ---------- 3) Último profissional ----------
         df_hist_cliente = df_historico_60_dias[df_historico_60_dias["CPF_CNPJ"] == cpf]
         if not df_hist_cliente.empty:
             df_hist_cliente = df_hist_cliente.sort_values("Data 1", ascending=False)
             ultimo_prof_id = str(df_hist_cliente["ID Prestador"].iloc[0])
-            if (
-                ultimo_prof_id not in utilizados
-                and ultimo_prof_id not in bloqueados
-                and (ultimo_prof_id not in preferidas_bloqueadas or preferidas_alocadas_dia[data_atendimento][ultimo_prof_id] == cpf)
-            ):
+            if ultimo_prof_id not in utilizados and ultimo_prof_id not in map(str, bloqueados) and not _bloqueada_por_reserva(ultimo_prof_id):
                 prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == ultimo_prof_id]
-                if not prof.empty:
-                    lat_prof = prof.iloc[0]["Latitude Profissional"]
-                    lon_prof = prof.iloc[0]["Longitude Profissional"]
-                    if pd.notnull(lat_prof) and pd.notnull(lon_prof) and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
+                if not prof.empty and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
+                    lat_prof = prof.iloc[0]["Latitude Profissional"]; lon_prof = prof.iloc[0]["Longitude Profissional"]
+                    if pd.notnull(lat_prof) and pd.notnull(lon_prof):
                         qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == ultimo_prof_id)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == ultimo_prof_id)].empty else 0
                         qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == ultimo_prof_id]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == ultimo_prof_id].empty else 0
-                        distancia = float(df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == ultimo_prof_id)]["Distância (km)"].iloc[0]) if not df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == ultimo_prof_id)].empty else None
+                        dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == ultimo_prof_id)]
+                        distancia = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else None
                         criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km" if distancia is not None else ""
                         linha[f"Classificação da Profissional {col}"] = col
                         linha[f"Critério {col}"] = criterio
@@ -636,72 +608,30 @@ def pipeline(file_path, output_dir):
                         linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
                             prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
                             duracao_servico, rua, numero, complemento, bairro, cidade,
-                            latitude, longitude, ja_atendeu=True,
-                            hora_entrada=hora_entrada,
-                            obs_prestador=obs_prestador
+                            latitude, longitude, ja_atendeu=True, hora_entrada=hora_entrada, obs_prestador=obs_prestador
                         )
                         linha[f"Critério Utilizado {col}"] = "Último profissional que atendeu"
                         utilizados.add(ultimo_prof_id)
                         col += 1
-    
-        # ----------- 4️⃣ QUERIDINHOS -----------
+
+        # ---------- 4) Queridinhas (<= 5 km) ----------
         for _, qrow in df_queridinhos.iterrows():
+            if col > 15: break
             queridinha_id = str(qrow["ID Prestador"]).strip()
-            if (
-                queridinha_id in utilizados or queridinha_id in bloqueados or
-                (queridinha_id in preferidas_bloqueadas and preferidas_alocadas_dia[data_atendimento][queridinha_id] != cpf)
-            ):
+            if queridinha_id in utilizados or queridinha_id in map(str, bloqueados) or _bloqueada_por_reserva(queridinha_id):
                 continue
             prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == queridinha_id]
-            if not prof.empty:
-                lat_prof = prof.iloc[0]["Latitude Profissional"]
-                lon_prof = prof.iloc[0]["Longitude Profissional"]
-                if pd.notnull(lat_prof) and pd.notnull(lon_prof) and "inativo" not in prof.iloc[0]["Nome Prestador"].lower():
-                    dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == queridinha_id)]
-                    distancia = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else None
-                    if distancia is not None and distancia <= 5.0:
-                        qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == queridinha_id)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == queridinha_id)].empty else 0
-                        qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == queridinha_id]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == queridinha_id].empty else 0
-                        criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km"
-                        linha[f"Classificação da Profissional {col}"] = col
-                        linha[f"Critério {col}"] = criterio
-                        linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
-                        linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
-                        linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
-                            prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
-                            duracao_servico, rua, numero, complemento, bairro, cidade,
-                            latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
-                            hora_entrada=hora_entrada,
-                            obs_prestador=obs_prestador
-                        )
-                        linha[f"Critério Utilizado {col}"] = "Profissional preferencial da plataforma (até 5 km)"
-                        utilizados.add(queridinha_id)
-                        col += 1
-    
-        # ----------- 5️⃣ MAIS PRÓXIMA GEOGRAFICAMENTE -----------
-        dist_cand = df_distancias[(df_distancias["CPF_CNPJ"] == cpf)].copy()
-        dist_cand = dist_cand[~dist_cand["ID Prestador"].isin(utilizados | set(bloqueados))]
-        dist_cand = dist_cand[
-            ~(
-                (dist_cand["ID Prestador"].isin(preferidas_bloqueadas)) & 
-                (dist_cand["ID Prestador"].map(lambda x: preferidas_alocadas_dia[data_atendimento][str(x)] if str(x) in preferidas_alocadas_dia[data_atendimento] else None) != cpf)
-            )
-        ]
-        dist_cand = dist_cand.sort_values("Distância (km)")
-        for _, dist_row in dist_cand.iterrows():
-            if col > 15:
-                break
-            id_prof = str(dist_row["ID Prestador"])
-            prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_prof]
             if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
                 continue
-            lat_prof = prof.iloc[0]["Latitude Profissional"]
-            lon_prof = prof.iloc[0]["Longitude Profissional"]
+            lat_prof = prof.iloc[0]["Latitude Profissional"]; lon_prof = prof.iloc[0]["Longitude Profissional"]
             if not (pd.notnull(lat_prof) and pd.notnull(lon_prof)):
                 continue
-            qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == id_prof)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == id_prof)].empty else 0
-            qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof].empty else 0
-            distancia = float(dist_row["Distância (km)"])
+            dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == queridinha_id)]
+            distancia = float(dist_row["Distância (km)"].iloc[0]) if not dist_row.empty else None
+            if distancia is None or distancia > 5.0:
+                continue
+            qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == queridinha_id)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == queridinha_id)].empty else 0
+            qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == queridinha_id]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == queridinha_id].empty else 0
             criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km"
             linha[f"Classificação da Profissional {col}"] = col
             linha[f"Critério {col}"] = criterio
@@ -711,25 +641,61 @@ def pipeline(file_path, output_dir):
                 prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
                 duracao_servico, rua, numero, complemento, bairro, cidade,
                 latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
-                hora_entrada=hora_entrada,
-                obs_prestador=obs_prestador
+                hora_entrada=hora_entrada, obs_prestador=obs_prestador
             )
-            linha[f"Critério Utilizado {col}"] = "Mais próxima geograficamente"
-            utilizados.add(id_prof)
+            linha[f"Critério Utilizado {col}"] = "Profissional preferencial da plataforma (até 5 km)"
+            utilizados.add(queridinha_id)
             col += 1
-    
-        # ----------- 6️⃣ SUMIDINHOS (Baixa disponibilidade) -----------
+
+        # ---------- 5) Mais próximas geograficamente ----------
+        if col <= 15:
+            dist_cand = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
+            dist_cand["ID Prestador"] = dist_cand["ID Prestador"].astype(str)
+            dist_cand = dist_cand[
+                ~dist_cand["ID Prestador"].isin(utilizados | set(map(str, bloqueados)))
+            ]
+            # tira reservadas para outros CPFs
+            dist_cand = dist_cand[~dist_cand["ID Prestador"].apply(lambda x: _bloqueada_por_reserva(x))]
+            dist_cand = dist_cand.sort_values("Distância (km)")
+
+            for _, dist_row in dist_cand.iterrows():
+                if col > 15:
+                    break
+                id_prof = str(dist_row["ID Prestador"])
+                prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == id_prof]
+                if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
+                    continue
+                lat_prof = prof.iloc[0]["Latitude Profissional"]; lon_prof = prof.iloc[0]["Longitude Profissional"]
+                if not (pd.notnull(lat_prof) and pd.notnull(lon_prof)):
+                    continue
+                qtd_atend_cliente = int(df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == id_prof)]["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not df_cliente_prestador[(df_cliente_prestador["CPF_CNPJ"] == cpf) & (df_cliente_prestador["ID Prestador"] == id_prof)].empty else 0
+                qtd_atend_total = int(df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof]["Qtd Atendimentos Prestador"].iloc[0]) if not df_qtd_por_prestador[df_qtd_por_prestador["ID Prestador"] == id_prof].empty else 0
+                distancia = float(dist_row["Distância (km)"])
+                criterio = f"cliente: {qtd_atend_cliente} | total: {qtd_atend_total} — {distancia:.2f} km"
+                linha[f"Classificação da Profissional {col}"] = col
+                linha[f"Critério {col}"] = criterio
+                linha[f"Nome Prestador {col}"] = prof.iloc[0]["Nome Prestador"]
+                linha[f"Celular {col}"] = prof.iloc[0]["Celular"]
+                linha[f"Mensagem {col}"] = gerar_mensagem_personalizada(
+                    prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
+                    duracao_servico, rua, numero, complemento, bairro, cidade,
+                    latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
+                    hora_entrada=hora_entrada, obs_prestador=obs_prestador
+                )
+                linha[f"Critério Utilizado {col}"] = "Mais próxima geograficamente"
+                utilizados.add(id_prof)
+                col += 1
+
+        # ---------- 6) Sumidinhas ----------
         for sum_id in df_sumidinhos["ID Prestador"].astype(str):
-            if (
-                sum_id in utilizados or sum_id in bloqueados or
-                (sum_id in preferidas_bloqueadas and preferidas_alocadas_dia[data_atendimento][sum_id] != cpf)
-            ):
+            if col > 15:
+                break
+            if sum_id in utilizados or sum_id in map(str, bloqueados) or _bloqueada_por_reserva(sum_id):
                 continue
             prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == sum_id]
             if prof.empty or "inativo" in prof.iloc[0]["Nome Prestador"].lower():
                 continue
-            lat_prof = prof.iloc[0]["Latitude Profissional"]
-            lon_prof = prof.iloc[0]["Longitude Profissional"]
+            lat_prof = prof.iloc[0]["Latitude Profissional"]; lon_prof = prof.iloc[0]["Longitude Profissional"]
             if not (pd.notnull(lat_prof) and pd.notnull(lon_prof)):
                 continue
             dist_row = df_distancias[(df_distancias["CPF_CNPJ"] == cpf) & (df_distancias["ID Prestador"] == sum_id)]
@@ -745,41 +711,31 @@ def pipeline(file_path, output_dir):
                 prof.iloc[0]["Nome Prestador"], nome_cliente, data_1, servico,
                 duracao_servico, rua, numero, complemento, bairro, cidade,
                 latitude, longitude, ja_atendeu=(qtd_atend_cliente>0),
-                hora_entrada=hora_entrada,
-                obs_prestador=obs_prestador
+                hora_entrada=hora_entrada, obs_prestador=obs_prestador
             )
             linha[f"Critério Utilizado {col}"] = "Baixa Disponibilidade"
             utilizados.add(sum_id)
             col += 1
-    
+
         matriz_resultado_corrigida.append(linha)
 
-
-
-
-    
     df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
-    app_url = "https://rotasvavive.streamlit.app/"
     df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
-        lambda row: f"👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n\n{row['Mensagem Padrão']}",
+        lambda row: f"👉 [Clique aqui para validar seu aceite]({APP_URL}?aceite={row['OS']})\n\n{row['Mensagem Padrão']}",
         axis=1
     )
 
-    
+    # Garantir colunas 1..15
     for i in range(1, 16):
-        if f"Classificação da Profissional {i}" not in df_matriz_rotas.columns:
-            df_matriz_rotas[f"Classificação da Profissional {i}"] = pd.NA
-        if f"Critério {i}" not in df_matriz_rotas.columns:
-            df_matriz_rotas[f"Critério {i}"] = pd.NA
-        if f"Nome Prestador {i}" not in df_matriz_rotas.columns:
-            df_matriz_rotas[f"Nome Prestador {i}"] = pd.NA
-        if f"Celular {i}" not in df_matriz_rotas.columns:
-            df_matriz_rotas[f"Celular {i}"] = pd.NA
-        if f"Critério Utilizado {i}" not in df_matriz_rotas.columns:
-            df_matriz_rotas[f"Critério Utilizado {i}"] = pd.NA
+        for base in ["Classificação da Profissional", "Critério", "Nome Prestador", "Celular", "Critério Utilizado", "Mensagem"]:
+            colname = f"{base} {i}"
+            if colname not in df_matriz_rotas.columns:
+                df_matriz_rotas[colname] = pd.NA
+
     base_cols = [
-        "OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano", 
-        "Duração do Serviço", "Hora de entrada","Observações prestador", "Ponto de Referencia", "Mensagem Padrão"
+        "OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
+        "Duração do Serviço", "Hora de entrada","Observações prestador",
+        "Ponto de Referencia", "Mensagem Padrão"
     ]
     prestador_cols = []
     for i in range(1, 16):
@@ -789,8 +745,10 @@ def pipeline(file_path, output_dir):
             f"Nome Prestador {i}",
             f"Celular {i}",
             f"Critério Utilizado {i}",
+            f"Mensagem {i}",
         ])
     df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
+
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
     with pd.ExcelWriter(final_path, engine='xlsxwriter') as writer:
         df_matriz_rotas.to_excel(writer, sheet_name="Rotas", index=False)
@@ -810,69 +768,48 @@ def pipeline(file_path, output_dir):
         df_atendimentos_futuros_validos.to_excel(writer, sheet_name="Atend Futuros OK", index=False)
         df_atendimentos_sem_localizacao.to_excel(writer, sheet_name="Atend Futuros Sem Loc", index=False)
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
+
+    # Pickles (se você usa em outras rotas)
+    df_clientes.to_pickle('df_clientes.pkl')
+    df_profissionais.to_pickle('df_profissionais.pkl')
+    df_preferencias.to_pickle('df_preferencias.pkl')
+    df_bloqueio.to_pickle('df_bloqueio.pkl')
+    df_queridinhos.to_pickle('df_queridinhos.pkl')
+    df_sumidinhos.to_pickle('df_sumidinhos.pkl')
+    df_atendimentos.to_pickle('df_atendimentos.pkl')
+    df_historico_60_dias.to_pickle('df_historico_60_dias.pkl')
+    df_cliente_prestador.to_pickle('df_cliente_prestador.pkl')
+    df_qtd_por_prestador.to_pickle('df_qtd_por_prestador.pkl')
+    df_distancias.to_pickle('df_distancias.pkl')
+    df_preferencias_completo.to_pickle('df_preferencias_completo.pkl')
+    df_bloqueio_completo.to_pickle('df_bloqueio_completo.pkl')
+    df_atendimentos_futuros_validos.to_pickle('df_atendimentos_futuros_validos.pkl')
+    df_atendimentos_sem_localizacao.to_pickle('df_atendimentos_sem_localizacao.pkl')
+    df_distancias_alerta.to_pickle('df_distancias_alerta.pkl')
+
     return final_path
 
-import streamlit as st
-import os
-import json
-import pandas as pd
+# ==========================
+# App (abas)
+# ==========================
+# Query params para aceite direto
+aceite_os = st.query_params.get("aceite", None)
+origem_aceite = st.query_params.get("origem", None)
 
-# Tente configurar o locale (pode ser ignorado se não funcionar)
-try:
-    locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
-except:
-    pass
-
-def formatar_data_portugues(data):
-    dias_pt = {
-        "Monday": "segunda-feira",
-        "Tuesday": "terça-feira",
-        "Wednesday": "quarta-feira",
-        "Thursday": "quinta-feira",
-        "Friday": "sexta-feira",
-        "Saturday": "sábado",
-        "Sunday": "domingo"
-    }
-    if pd.isnull(data) or data == "":
-        return ""
-    try:
-        s = str(data)
-        if len(s) >= 10 and s[4] == '-' and s[7] == '-':
-            # Trata explicitamente AAAA-MM-DD para não inverter mês/dia
-            ano = s[0:4]
-            mes = s[5:7]
-            dia = s[8:10]
-            dt = pd.Timestamp(year=int(ano), month=int(mes), day=int(dia))
-        else:
-            dt = pd.to_datetime(data, dayfirst=True, errors='coerce')
-        if pd.isnull(dt):
-            return str(data)
-        dia_semana_en = dt.strftime("%A")
-        dia_semana_pt = dias_pt.get(dia_semana_en, dia_semana_en)
-        return f"{dia_semana_pt}, {dt.strftime('%d/%m/%Y')}"
-    except Exception:
-        return str(data)
-
-
-
-PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"
-PORTAL_OS_LIST = "portal_atendimentos_os_list.json"
-
-# Função para registrar aceite (usada nos cards públicos ANTES da senha)
 def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
-    from datetime import datetime
-    ACEITES_FILE = "aceites.xlsx"
     agora = datetime.now()
     data = agora.strftime("%d/%m/%Y")
     dia_semana = agora.strftime("%A")
     horario = agora.strftime("%H:%M:%S")
+
     if os.path.exists(ACEITES_FILE):
         df = pd.read_excel(ACEITES_FILE)
     else:
         df = pd.DataFrame(columns=[
-            "OS", "Profissional", "Telefone", "Aceitou", 
+            "OS", "Profissional", "Telefone", "Aceitou",
             "Data do Aceite", "Dia da Semana", "Horário do Aceite", "Origem"
         ])
+
     nova_linha = {
         "OS": os_id,
         "Profissional": profissional,
@@ -883,18 +820,50 @@ def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
         "Horário do Aceite": horario,
         "Origem": origem if origem else ""
     }
+
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
     df.to_excel(ACEITES_FILE, index=False)
 
-# Controle de autenticação global
+    # dispara e-mail (opcional, via env)
+    enviar_email_aceite_gmail(os_id, profissional, telefone)
+
+def exibe_formulario_aceite(os_id, origem=None):
+    st.header(f"Validação de Aceite (OS {os_id})")
+    profissional = st.text_input("Nome da Profissional")
+    telefone = st.text_input("Telefone para contato")
+    resposta = st.empty()
+
+    col1, col2 = st.columns(2)
+    aceite_submetido = False
+
+    with col1:
+        if st.button("Sim, aceito este atendimento"):
+            salvar_aceite(os_id, profissional, telefone, True, origem=origem)
+            resposta.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+            aceite_submetido = True
+
+    with col2:
+        if st.button("Não posso aceitar"):
+            salvar_aceite(os_id, profissional, telefone, False, origem=origem)
+            resposta.success("✅ Obrigado! Fique de olho em novas oportunidades.")
+            aceite_submetido = True
+
+    if aceite_submetido:
+        st.stop()
+
+if aceite_os:
+    exibe_formulario_aceite(aceite_os, origem=origem_aceite)
+    st.stop()
+
+# Controle de autenticação global para portal público
 if "admin_autenticado" not in st.session_state:
     st.session_state.admin_autenticado = False
 
-# Só mostra cards e campo de senha enquanto não autenticou
+# Cabeçalho da área pública
 if not st.session_state.admin_autenticado:
     st.markdown("""
-        <div style='display:flex;align-items:center;gap:16px'>
-            <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
+        <div style='display:flex;align-items:center;gap:16px;justify-content:center;flex-direction:column'>
+            <img src='https://i.imgur.com/gIhC0fC.png' height='64'>
             <span style='font-size:1.7em;font-weight:700;color:#18d96b;letter-spacing:1px;'>BELO HORIZONTE || PORTAL DE ATENDIMENTOS</span>
         </div>
         <p style='color:#666;font-size:1.08em;margin:8px 0 18px 0'>
@@ -907,45 +876,44 @@ if not st.session_state.admin_autenticado:
         df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
         with open(PORTAL_OS_LIST, "r") as f:
             os_list = json.load(f)
-        df = df[~df["OS"].isna()]  # remove linhas totalmente vazias de OS
-        df = df[pd.to_numeric(df["OS"], errors="coerce").isin(os_list)]
 
-       # ---- REMOVER OS COM 3+ ACEITES SIM ----
-        ACEITES_FILE = "aceites.xlsx"
+        def padronizar_os_coluna(col):
+            def safe_os(x):
+                try: return str(int(float(x))).strip()
+                except: return ""
+            return col.apply(safe_os).astype(str)
+
+        df = df[~df["OS"].isna()]
+        df["OS"] = padronizar_os_coluna(df["OS"])
+        df = df[df["OS"].isin(list(map(str, os_list)))]
+
+        # Remove OS com 3+ aceites SIM
         if os.path.exists(ACEITES_FILE):
-            def padronizar_os_coluna(col):
-                def safe_os(x):
-                    try:
-                        return str(int(float(x))).strip()
-                    except:
-                        return ""
-                return col.apply(safe_os).astype(str)
             df_aceites = pd.read_excel(ACEITES_FILE)
             df_aceites["OS"] = padronizar_os_coluna(df_aceites["OS"])
-            df["OS"] = padronizar_os_coluna(df["OS"])
             aceites_sim = df_aceites[df_aceites["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
             contagem = aceites_sim.groupby("OS").size()
             os_3mais = contagem[contagem >= 3].index.tolist()
             df = df[~df["OS"].isin(os_3mais)]
-        # --------------------------------------
 
-
-
-        
         if df.empty:
             st.info("Nenhum atendimento disponível.")
         else:
             st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
             for _, row in df.iterrows():
                 servico = row.get("Serviço", "")
-                nome_cliente = row.get("Cliente", "")
                 bairro = row.get("Bairro", "")
                 data = row.get("Data 1", "")
-                data_pt = formatar_data_portugues(data)
+                data_pt = ""
+                try:
+                    dt = pd.to_datetime(data, dayfirst=True, errors="coerce")
+                    data_pt = f"{traduzir_dia_semana(dt)}, {dt.strftime('%d/%m/%Y')}" if pd.notnull(dt) else ""
+                except:
+                    pass
                 hora_entrada = row.get("Hora de entrada", "")
                 hora_servico = row.get("Horas de serviço", "")
                 referencia = row.get("Ponto de Referencia", "")
-                os_id = int(row["OS"])
+                os_id = str(int(float(row["OS"])))
 
                 st.markdown(f"""
                     <div style="
@@ -969,26 +937,26 @@ if not st.session_state.admin_autenticado:
                             <b>Data:</b> <span>{data_pt}</span><br>
                             <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
                             <b>Horas de serviço:</b> <span>{hora_servico}</span><br>
-                            <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
+                            <b>Ponto de Referência:</b> <span>{referencia if referencia and str(referencia) != 'nan' else '-'}</span>
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
-                expander_style = """
+
+                st.markdown("""
                 <style>
-                /* Aplica fundo verde e texto branco ao expander do Streamlit */
                 div[role="button"][aria-expanded] {
-                    background: #25D366 !important;
+                    background: #25D366 !important; /* fix: código correto */
                     color: #fff !important;
                     border-radius: 10px !important;
                     font-weight: bold;
                     font-size: 1.08em;
                 }
                 </style>
-                """
-                st.markdown(expander_style, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+
                 with st.expander("Tem disponibilidade? Clique aqui para aceitar este atendimento!"):
-                    profissional = st.text_input(f"Nome da Profissional", key=f"prof_nome_{os_id}")
-                    telefone = st.text_input(f"Telefone para contato", key=f"prof_tel_{os_id}")
+                    profissional = st.text_input("Nome da Profissional", key=f"prof_nome_{os_id}")
+                    telefone = st.text_input("Telefone para contato", key=f"prof_tel_{os_id}")
                     resposta = st.empty()
                     if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
                         salvar_aceite(os_id, profissional, telefone, True, origem="portal")
@@ -996,7 +964,7 @@ if not st.session_state.admin_autenticado:
     else:
         st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
 
-    # ---- CAMPO DE SENHA para liberar as demais abas ----
+    # Campo de senha global para liberar demais abas
     senha = st.text_input("Área restrita. Digite a senha para liberar as demais abas:", type="password")
     if st.button("Entrar", key="btn_senha_global"):
         if senha == "vvv":
@@ -1004,14 +972,12 @@ if not st.session_state.admin_autenticado:
             st.rerun()
         else:
             st.error("Senha incorreta. Acesso restrito.")
-
-    # Impede de ver as outras abas
     st.stop()
 
-
-# Se autenticado, agora sim mostra TODAS as abas normalmente!
+# ---------- A partir daqui, usuário autenticado ----------
 tabs = st.tabs(["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites", "Profissionais Próximos", "Mensagem Rápida"])
 
+# ===== Aba 1: Upload de Arquivo =====
 with tabs[1]:
     if "excel_processado" not in st.session_state:
         st.session_state.excel_processado = False
@@ -1020,12 +986,8 @@ with tabs[1]:
 
     uploaded_file = st.file_uploader("Selecione o arquivo Excel original", type=["xlsx"])
 
-    # Só processa se o arquivo mudou ou nunca foi processado
     if uploaded_file is not None:
-        if (
-            not st.session_state.excel_processado
-            or st.session_state.nome_arquivo_processado != uploaded_file.name
-        ):
+        if (not st.session_state.excel_processado) or (st.session_state.nome_arquivo_processado != uploaded_file.name):
             with st.spinner("Processando... Isso pode levar alguns segundos."):
                 with tempfile.TemporaryDirectory() as tempdir:
                     temp_path = os.path.join(tempdir, uploaded_file.name)
@@ -1043,42 +1005,41 @@ with tabs[1]:
                                 key="download_excel_consolidado"
                             )
                             import shutil
-                            shutil.copy(excel_path, "rotas_bh_dados_tratados_completos.xlsx")
+                            shutil.copy(excel_path, ROTAS_FILE)
                             st.session_state.excel_processado = True
                             st.session_state.nome_arquivo_processado = uploaded_file.name
                         else:
                             st.error("Arquivo final não encontrado. Ocorreu um erro no pipeline.")
                     except Exception as e:
-                        st.error(f"Erro no processamento: {e}") 
+                        st.error(f"Erro no processamento: {e}")
         else:
-            # Já processado: só mostra o botão de download
-            if os.path.exists("rotas_bh_dados_tratados_completos.xlsx"):
+            if os.path.exists(ROTAS_FILE):
                 st.download_button(
                     label="📥 Baixar Excel consolidado",
-                    data=open("rotas_bh_dados_tratados_completos.xlsx", "rb").read(),
+                    data=open(ROTAS_FILE, "rb").read(),
                     file_name="rotas_bh_dados_tratados_completos.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="download_excel_consolidado"
+                    key="download_excel_consolidado_cached"
                 )
     else:
-        # Resetar caso usuário remova o arquivo
         st.session_state.excel_processado = False
         st.session_state.nome_arquivo_processado = None
-    
 
+# ===== Aba 2: Matriz de Rotas =====
 with tabs[2]:
-    
     if os.path.exists(ROTAS_FILE):
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data", options=["Todos"] + [str(d) for d in datas], key="data_rotas")
         clientes = df_rotas["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_rotas")
+
         profissionais = []
         for i in range(1, 11):
             profissionais.extend(df_rotas[f"Nome Prestador {i}"].dropna().unique())
         profissionais = list(set([p for p in profissionais if isinstance(p, str)]))
         profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + profissionais, key="prof_rotas")
+
         df_rotas_filt = df_rotas.copy()
         if data_sel != "Todos":
             df_rotas_filt = df_rotas_filt[df_rotas_filt["Data 1"].dt.date.astype(str) == data_sel]
@@ -1087,8 +1048,9 @@ with tabs[2]:
         if profissional_sel != "Todos":
             mask = False
             for i in range(1, 11):
-                mask |= (df_rotas_filt[f"Nome Prestador {i}"] == profissional_sel)
+                mask = (mask | (df_rotas_filt[f"Nome Prestador {i}"] == profissional_sel))
             df_rotas_filt = df_rotas_filt[mask]
+
         st.dataframe(df_rotas_filt, use_container_width=True)
         st.download_button(
             label="📥 Baixar Excel consolidado",
@@ -1099,8 +1061,7 @@ with tabs[2]:
     else:
         st.info("Faça o upload e aguarde o processamento para liberar a matriz de rotas.")
 
-
-
+# ===== Aba 3: Aceites =====
 with tabs[3]:
     if "atualizar_aceites" not in st.session_state:
         st.session_state.atualizar_aceites = False
@@ -1109,14 +1070,7 @@ with tabs[3]:
         st.session_state.atualizar_aceites = not st.session_state.atualizar_aceites
         st.rerun()
 
-    # ... todo o código atual da aba ...
-
-
-
     if os.path.exists(ACEITES_FILE) and os.path.exists(ROTAS_FILE):
-        import io
-        from datetime import datetime
-
         df_aceites = pd.read_excel(ACEITES_FILE)
         df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
 
@@ -1124,15 +1078,12 @@ with tabs[3]:
         df_rotas["OS"] = df_rotas["OS"].astype(str).str.strip()
 
         df_aceites_completo = pd.merge(
-            df_aceites, df_rotas[
-                ["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
-                 "Duração do Serviço", "Hora de entrada", "Observações prestador", "Ponto de Referencia"]
-            ],
+            df_aceites,
+            df_rotas[["OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
+                      "Duração do Serviço", "Hora de entrada", "Observações prestador", "Ponto de Referencia"]],
             how="left", on="OS"
         )
 
-        
-        # ---------- BLOCO DE INDICADOR: Quantos aceites SIM por OS ----------
         datas = df_rotas["Data 1"].dropna().sort_values().dt.date.unique()
         data_sel = st.selectbox("Filtrar por data do atendimento", options=["Todos"] + [str(d) for d in datas], key="data_aceite")
         df_rotas_sel = df_rotas.copy()
@@ -1143,42 +1094,23 @@ with tabs[3]:
             df_rotas_sel = df_rotas_sel[df_rotas_sel["Data 1"].dt.date == hoje]
         os_do_dia = df_rotas_sel["OS"].astype(str).unique()
         aceites_do_dia = df_aceites_completo[df_aceites_completo["OS"].astype(str).isin(os_do_dia)]
-        
-        # Normaliza colunas OS
         df_rotas_sel["OS"] = df_rotas_sel["OS"].astype(str).str.strip()
         aceites_do_dia["OS"] = aceites_do_dia["OS"].astype(str).str.strip()
-        
-        # Só aceita SIM
+
         aceites_sim = aceites_do_dia[aceites_do_dia["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
         qtd_aceites_por_os = aceites_sim.groupby("OS").size()
-        
+
         df_qtd_aceites = pd.DataFrame({'OS': os_do_dia})
         df_qtd_aceites["Qtd Aceites"] = df_qtd_aceites["OS"].map(qtd_aceites_por_os).fillna(0).astype(int)
         df_qtd_aceites = df_qtd_aceites.sort_values("OS")
-        
+
         st.markdown("### Indicador: Quantidade de Aceites por OS")
-        
-        custom_css = """
-        <style>
-        th, td {
-            min-width: 80px !important;
-            max-width: 100px !important;
-            text-align: center !important;
-        }
-        </style>
-        """
-        st.markdown(custom_css, unsafe_allow_html=True)
-        st.markdown(df_qtd_aceites.to_html(index=False), unsafe_allow_html=True)
+        st.dataframe(df_qtd_aceites, use_container_width=True)
 
-        # ---------- FIM DO BLOCO DE INDICADOR ----------
-
-
-        # Filtros detalhados
         clientes = df_aceites_completo["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_aceite")
         profissionais = df_aceites_completo["Profissional"].dropna().unique() if "Profissional" in df_aceites_completo else []
         profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + list(profissionais), key="prof_aceite")
-        # Gera lista de OS válidas
         os_validos = df_aceites_completo["OS"].dropna().astype(str).unique()
         os_sel = st.selectbox("Filtrar por OS", options=["Todos"] + list(os_validos), key="os_aceite")
 
@@ -1199,221 +1131,43 @@ with tabs[3]:
             label="Baixar histórico de aceites (completo)",
             data=output.getvalue(),
             file_name="aceites_completo.xlsx",
-            key="download_aceites_completo"
         )
     elif os.path.exists(ACEITES_FILE):
-        import io
         df_aceites = pd.read_excel(ACEITES_FILE)
-        st.dataframe(df_aceites)
+        st.dataframe(df_aceites, use_container_width=True)
         output = io.BytesIO()
         df_aceites.to_excel(output, index=False)
         st.download_button(
             label="Baixar histórico de aceites",
             data=output.getvalue(),
             file_name="aceites.xlsx",
-            key="download_aceites"
         )
     else:
         st.info("Nenhum aceite registrado ainda.")
 
-
-
-import json
-import urllib.parse
-
-
-with tabs[0]:
-    st.markdown("""
-        <div style='display:flex;align-items:center;gap:16px'>
-            <img src='https://i.imgur.com/gIhC0fC.png' height='48'>
-            <span style='font-size:1.7em;font-weight:700;color:#18d96b;letter-spacing:1px;'>BELO HORIZONTE || PORTAL DE ATENDIMENTOS</span>
-        </div>
-        <p style='color:#666;font-size:1.08em;margin:8px 0 18px 0'>
-            Consulte abaixo os atendimentos disponíveis!
-        </p>
-        """, unsafe_allow_html=True)
-
-    # Controle de exibição e autenticação admin
-    if "exibir_admin_portal" not in st.session_state:
-        st.session_state.exibir_admin_portal = False
-    if "admin_autenticado_portal" not in st.session_state:
-        st.session_state.admin_autenticado_portal = False
-
-    # Botão para mostrar a área admin
-    if st.button("Acesso admin para editar atendimentos do portal"):
-        st.session_state.exibir_admin_portal = True
-
-    # ---- BLOCO ADMIN ----
-    if st.session_state.exibir_admin_portal:
-        senha = st.text_input("Digite a senha de administrador", type="password", key="senha_portal_admin")
-        if st.button("Validar senha", key="btn_validar_senha_portal"):
-            if senha == "vvv":
-                st.session_state.admin_autenticado_portal = True
-            else:
-                st.error("Senha incorreta.")
-
-    if st.session_state.admin_autenticado_portal:
-        # Permite upload OU reutilização do arquivo salvo
-        if "portal_file_buffer" not in st.session_state:
-            st.session_state.portal_file_buffer = None
-    
-        uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx"], key="portal_upload")
-        use_last_file = False
-    
-        if uploaded_file:
-            # Salva arquivo na sessão e disco
-            st.session_state.portal_file_buffer = uploaded_file.getbuffer()
-            with open(PORTAL_EXCEL, "wb") as f:
-                f.write(st.session_state.portal_file_buffer)
-            st.success("Arquivo salvo! Escolha agora os atendimentos que ficarão visíveis.")
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-        elif st.session_state.portal_file_buffer:
-            # Usa o arquivo já carregado na sessão
-            with open(PORTAL_EXCEL, "wb") as f:
-                f.write(st.session_state.portal_file_buffer)
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-        elif os.path.exists(PORTAL_EXCEL):
-            # Usa o arquivo salvo no disco
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-        else:
-            df = None
-    
-        if df is not None:
-            # ------- FILTRO POR DATA1 -------
-            datas_disponiveis = sorted(df["Data 1"].dropna().unique())
-            datas_formatadas = [str(pd.to_datetime(d).date()) for d in datas_disponiveis]
-            datas_selecionadas = st.multiselect(
-                "Filtrar atendimentos por Data",
-                options=datas_formatadas,
-                default=[],
-                key="datas_multiselect"
-            )
-            if datas_selecionadas:
-                df = df[df["Data 1"].astype(str).apply(lambda d: str(pd.to_datetime(d).date()) in datas_selecionadas)]
-    
-            # Monta opções com OS, Cliente, Serviço e Bairro
-            opcoes = [
-                f'OS {int(row.OS)} | {row["Cliente"]} | {row.get("Serviço", "")} | {row.get("Bairro", "")}'
-                for _, row in df.iterrows()
-                if not pd.isnull(row.OS)
-            ]
-            selecionadas = st.multiselect(
-                "Selecione os atendimentos para exibir (OS | Cliente | Serviço | Bairro)",
-                opcoes,
-                key="os_multiselect"
-            )
-            if st.button("Salvar atendimentos exibidos", key="salvar_os_btn"):
-                # Para salvar apenas a lista de OS selecionadas (extraindo da string)
-                os_ids = [
-                    int(op.split()[1]) for op in selecionadas
-                    if op.startswith("OS ")
-                ]
-                with open(PORTAL_OS_LIST, "w") as f:
-                    json.dump(os_ids, f)
-                st.success("Seleção salva! Agora os atendimentos já ficam disponíveis a todos.")
-                st.session_state.exibir_admin_portal = False
-                st.session_state.admin_autenticado_portal = False
-                st.rerun()
-
-
-    # ---- BLOCO VISUALIZAÇÃO (PÚBLICO) ----
-    if not st.session_state.exibir_admin_portal:
-        if os.path.exists(PORTAL_EXCEL) and os.path.exists(PORTAL_OS_LIST):
-            df = pd.read_excel(PORTAL_EXCEL, sheet_name="Clientes")
-            with open(PORTAL_OS_LIST, "r") as f:
-                os_list = json.load(f)
-            # Só exibe OS selecionadas
-            df = df[~df["OS"].isna()]  # remove linhas totalmente vazias de OS
-            df = df[pd.to_numeric(df["OS"], errors="coerce").isin(os_list)]
-            if df.empty:
-                st.info("Nenhum atendimento disponível.")
-            else:
-                st.write(f"Exibindo {len(df)} atendimentos selecionados pelo administrador:")
-                for _, row in df.iterrows():
-                    servico = row.get("Serviço", "")
-                    nome_cliente = row.get("Cliente", "")
-                    bairro = row.get("Bairro", "")
-                    data = formatar_data_portugues(row.get("Data 1", ""))
-                    hora_entrada = row.get("Hora de entrada", "")
-                    hora_servico = row.get("Horas de serviço", "")
-                    referencia = row.get("Ponto de Referencia", "")
-                    os_id = int(row["OS"])
-                    
-                    st.markdown(f"""
-                        <div style="
-                            background: #fff;
-                            border: 1.5px solid #eee;
-                            border-radius: 18px;
-                            padding: 18px 18px 12px 18px;
-                            margin-bottom: 14px;
-                            min-width: 260px;
-                            max-width: 440px;
-                            color: #00008B;
-                            font-family: Arial, sans-serif;
-                        ">
-                            <div style="font-size:1.2em; font-weight:bold; color:#00008B; margin-bottom:2px;">
-                                {servico}
-                            </div>
-                            <div style="font-size:1em; color:#00008B; margin-bottom:7px;">
-                                <b style="color:#00008B;margin-left:24px">Bairro:</b> <span>{bairro}</span>
-                            </div>
-                            <div style="font-size:0.95em; color:#00008B;">
-                                <b>Data:</b> <span>{data}</span><br>
-                                <b>Hora de entrada:</b> <span>{hora_entrada}</span><br>
-                                <b>Horas de serviço:</b> <span>{hora_servico}</span><br>
-                                <b>Ponto de Referência:</b> <span>{referencia if referencia and referencia != 'nan' else '-'}</span>
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
-                    expander_style = """
-                    <style>
-                    /* Aplica fundo verde e texto branco ao expander do Streamlit */
-                    div[role="button"][aria-expanded] {
-                        background: #25D66 !important;
-                        color: #fff !important;
-                        border-radius: 10px !important;
-                        font-weight: bold;
-                        font-size: 1.08em;
-                    }
-                    </style>
-                    """
-                    st.markdown(expander_style, unsafe_allow_html=True)
-                    
-                    with st.expander("Tem disponibilidade? Clique aqui para aceitar este atendimento!"):
-                        profissional = st.text_input(f"Nome da Profissional", key=f"prof_nome_{os_id}")
-                        telefone = st.text_input(f"Telefone para contato", key=f"prof_tel_{os_id}")
-                        resposta = st.empty()
-                        if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
-                            salvar_aceite(os_id, profissional, telefone, True, origem="portal")
-                            resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
-
-
-        else:
-            st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
-
+# ===== Aba 4: Profissionais Próximos =====
 with tabs[4]:
-        st.subheader("Buscar Profissionais Próximos")
-        lat = st.number_input("Latitude", value=-19.9, format="%.6f")
-        lon = st.number_input("Longitude", value=-4.9, format="%.6f")
-        n = st.number_input("Qtd. profissionais", min_value=1, value=5, step=1)
-        if st.button("Buscar"):
-            # Usa o df_profissionais já tratado do pipeline
-            if os.path.exists(ROTAS_FILE):
-                df_profissionais = pd.read_excel(ROTAS_FILE, sheet_name="Profissionais")
-                mask_inativo_nome = df_profissionais['Nome Prestador'].astype(str).str.contains('inativo', case=False, na=False)
-                df_profissionais = df_profissionais[~mask_inativo_nome]
-                df_profissionais = df_profissionais.dropna(subset=['Latitude Profissional', 'Longitude Profissional'])
-                input_coords = (lat, lon)
-                df_profissionais['Distância_km'] = df_profissionais.apply(
-                    lambda row: geodesic(input_coords, (row['Latitude Profissional'], row['Longitude Profissional'])).km, axis=1
-                )
-                df_melhores = df_profissionais.sort_values('Distância_km').head(int(n))
-                st.dataframe(df_melhores[['Nome Prestador', 'Celular', 'Qtd Atendimentos', 'Latitude Profissional', 'Longitude Profissional', 'Distância_km']])
-            else:
-                st.info("Faça upload e processamento do arquivo para habilitar a busca.")
-    
-# Aba "Mensagem Rápida"
+    st.subheader("Buscar Profissionais Próximos")
+    # Coordenadas padrão aproximadas de BH
+    lat = st.number_input("Latitude", value=-19.919, format="%.6f")
+    lon = st.number_input("Longitude", value=-43.938, format="%.6f")
+    n = st.number_input("Qtd. profissionais", min_value=1, value=5, step=1)
+    if st.button("Buscar"):
+        if os.path.exists(ROTAS_FILE):
+            df_profissionais = pd.read_excel(ROTAS_FILE, sheet_name="Profissionais")
+            mask_inativo_nome = df_profissionais['Nome Prestador'].astype(str).str.contains('inativo', case=False, na=False)
+            df_profissionais = df_profissionais[~mask_inativo_nome]
+            df_profissionais = df_profissionais.dropna(subset=['Latitude Profissional', 'Longitude Profissional'])
+            input_coords = (lat, lon)
+            df_profissionais['Distância_km'] = df_profissionais.apply(
+                lambda row: geodesic(input_coords, (row['Latitude Profissional'], row['Longitude Profissional'])).km, axis=1
+            )
+            df_melhores = df_profissionais.sort_values('Distância_km').head(int(n))
+            st.dataframe(df_melhores[['Nome Prestador', 'Celular', 'Qtd Atendimentos', 'Latitude Profissional', 'Longitude Profissional', 'Distância_km']], use_container_width=True)
+        else:
+            st.info("Faça upload e processamento do arquivo para habilitar a busca.")
+
+# ===== Aba 5: Mensagem Rápida =====
 with tabs[5]:
     st.subheader("Gerar Mensagem Rápida WhatsApp")
     os_id = st.text_input("Código da OS* (obrigatório)", max_chars=12)
@@ -1423,12 +1177,7 @@ with tabs[5]:
     hora_entrada = st.text_input("Hora de entrada (ex: 08:00)")
     duracao = st.text_input("Duração do atendimento (ex: 2h)")
 
-    app_url = "https://rotasvavive.streamlit.app"  # sua URL real
-    if os_id.strip():
-        link_aceite = f"{app_url}?aceite={os_id}&origem=mensagem_rapida"
-    else:
-        link_aceite = ""
-
+    link_aceite = f"{APP_URL}?aceite={os_id}&origem=mensagem_rapida" if os_id.strip() else ""
     if st.button("Gerar Mensagem"):
         if not os_id.strip():
             st.error("Preencha o código da OS!")
@@ -1447,5 +1196,3 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
-
-
