@@ -1,8 +1,9 @@
-#
+# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import locale
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 import tempfile
@@ -14,19 +15,14 @@ from email.mime.text import MIMEText
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"  # ou o nome correto do seu arquivo de clientes
 PORTAL_OS_LIST = "portal_atendimentos_os_list.json" # ou o nome correto da lista de OS (caso use JSON, por exemplo)
 
-
 st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", layout="wide")
 
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
 
-
-
-
-
 def enviar_email_aceite_gmail(os_id, profissional, telefone):
     remetente = "andre.mtavares3@gmail.com"  # <-- seu e-mail de envio
-    senha = "3473010803474"        # <-- sua senha de app do Gmail
+    senha = "3473010803474"                  # <-- sua senha de app do Gmail (cuidado ao versionar!)
     destinatario = "bh.savassi@vavive.com.br"
 
     assunto = f"Novo aceite registrado | OS {os_id}"
@@ -52,12 +48,11 @@ def enviar_email_aceite_gmail(os_id, profissional, telefone):
     except Exception as e:
         print("Erro ao enviar e-mail:", e)
 
-
 def exibe_formulario_aceite(os_id, origem=None):
     st.header(f"Validação de Aceite (OS {os_id})")
     profissional = st.text_input("Nome da Profissional")
     telefone = st.text_input("Telefone para contato")
-    resposta = st.empty()  # para mensagem dinâmica
+    resposta = st.empty()
 
     col1, col2 = st.columns(2)
     aceite_submetido = False
@@ -77,11 +72,6 @@ def exibe_formulario_aceite(os_id, origem=None):
     if aceite_submetido:
         st.stop()
 
-
-
-
-
-
 def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
     agora = pd.Timestamp.now()
     data = agora.strftime("%d/%m/%Y")
@@ -92,7 +82,7 @@ def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
     else:
         df = pd.DataFrame(columns=[
             "OS", "Profissional", "Telefone", "Aceitou", 
-            "Data do Aceite", "Dia da Semana", "Horário do Aceite"
+            "Data do Aceite", "Dia da Semana", "Horário do Aceite", "Origem"
         ])
     nova_linha = {
         "OS": os_id,
@@ -106,14 +96,12 @@ def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
     }
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
     df.to_excel(ACEITES_FILE, index=False)
-# >>> Envio de alerta por e-mail <<<
     enviar_email_aceite_gmail(os_id, profissional, telefone)
 
 aceite_os = st.query_params.get("aceite", None)
 origem_aceite = st.query_params.get("origem", None)
 
 if aceite_os:
-    # Passe a origem para o formulário de aceite
     exibe_formulario_aceite(aceite_os, origem=origem_aceite)
     st.stop()
 
@@ -125,13 +113,14 @@ def traduzir_dia_semana(date_obj):
     return dias_pt[date_obj.strftime('%A')]
 
 def formatar_nome_simples(nome):
-    nome = nome.strip()
+    nome = str(nome or "").strip()
     nome = nome.replace("CI ", "").replace("Ci ", "").replace("C i ", "").replace("C I ", "")
     partes = nome.split()
-    if partes[0].lower() in ['ana', 'maria'] and len(partes) > 1:
+    if partes and partes[0].lower() in ['ana', 'maria'] and len(partes) > 1:
         return " ".join(partes[:2])
-    else:
+    elif partes:
         return partes[0]
+    return nome
 
 def gerar_mensagem_personalizada(
     nome_profissional, nome_cliente, data_servico, servico,
@@ -139,7 +128,7 @@ def gerar_mensagem_personalizada(
     ja_atendeu, hora_entrada, obs_prestador 
 ):
     nome_profissional_fmt = formatar_nome_simples(nome_profissional)
-    nome_cliente_fmt = nome_cliente.split()[0].strip().title()
+    nome_cliente_fmt = str(nome_cliente).split()[0].strip().title()
     if isinstance(data_servico, str):
         data_dt = pd.to_datetime(data_servico, dayfirst=True, errors="coerce")
     else:
@@ -200,6 +189,11 @@ def salvar_df(df, nome_arquivo, output_dir):
 
 def pipeline(file_path, output_dir):
     import xlsxwriter
+    from collections import defaultdict
+
+    # ============================
+    # 1) Base: leitura e normalização
+    # ============================
     df_clientes_raw = pd.read_excel(file_path, sheet_name="Clientes")
     df_clientes = df_clientes_raw[[
         "ID","UpdatedAt","celular","cpf",
@@ -241,6 +235,7 @@ def pipeline(file_path, output_dir):
         "Número","Rua","Nome Cliente"
     ]]
     salvar_df(df_clientes, "df_clientes", output_dir)
+
     df_profissionais_raw = pd.read_excel(file_path, sheet_name="Profissionais")
     df_profissionais = df_profissionais_raw[[
         "ID","atendimentos_feitos","celular","cpf",
@@ -280,6 +275,7 @@ def pipeline(file_path, output_dir):
         "Número","Rua","Nome Prestador"
     ]]
     salvar_df(df_profissionais, "df_profissionais", output_dir)
+
     df_preferencias_raw = pd.read_excel(file_path, sheet_name="Preferencias")
     df_preferencias = df_preferencias_raw[[
         "CPF/CNPJ","Cliente","ID Profissional","Prestador"
@@ -295,6 +291,7 @@ def pipeline(file_path, output_dir):
         "CPF_CNPJ","Nome Cliente","ID Prestador","Nome Prestador"
     ]]
     salvar_df(df_preferencias, "df_preferencias", output_dir)
+
     df_bloqueio_raw = pd.read_excel(file_path, sheet_name="Bloqueio")
     df_bloqueio = df_bloqueio_raw[[
         "CPF/CNPJ","Cliente","ID Profissional","Prestador"
@@ -310,6 +307,7 @@ def pipeline(file_path, output_dir):
         "CPF_CNPJ","Nome Cliente","ID Prestador","Nome Prestador"
     ]]
     salvar_df(df_bloqueio, "df_bloqueio", output_dir)
+
     df_queridinhos_raw = pd.read_excel(file_path, sheet_name="Profissionais Preferenciais")
     df_queridinhos = df_queridinhos_raw[[
         "ID Profissional","Profissional"
@@ -321,6 +319,7 @@ def pipeline(file_path, output_dir):
     df_queridinhos["Nome Prestador"] = df_queridinhos["Profissional"].astype(str).str.strip()
     df_queridinhos = df_queridinhos[["ID Prestador","Nome Prestador"]]
     salvar_df(df_queridinhos, "df_queridinhos", output_dir)
+
     df_sumidinhos_raw = pd.read_excel(file_path, sheet_name="Baixa Disponibilidade")
     df_sumidinhos = df_sumidinhos_raw[[
         "ID Profissional","Profissional"
@@ -332,6 +331,7 @@ def pipeline(file_path, output_dir):
     df_sumidinhos["Nome Prestador"] = df_sumidinhos["Profissional"].astype(str).str.strip()
     df_sumidinhos = df_sumidinhos[["ID Prestador","Nome Prestador"]]
     salvar_df(df_sumidinhos, "df_sumidinhos", output_dir)
+
     df_atendimentos = pd.read_excel(file_path, sheet_name="Atendimentos")
     colunas_desejadas = [
         "OS","Status Serviço","Data 1","Plano","CPF/ CNPJ","Cliente","Serviço",
@@ -348,11 +348,12 @@ def pipeline(file_path, output_dir):
         .str.replace(r"\.0$", "", regex=True).str.strip()
     )
     salvar_df(df_atendimentos, "df_atendimentos", output_dir)
+
     hoje = datetime.now().date()
     limite = hoje - timedelta(days=60)
     data1_datetime = pd.to_datetime(df_atendimentos["Data 1"], errors="coerce")
     df_historico_60_dias = df_atendimentos[
-        (df_atendimentos["Status Serviço"].str.lower() != "cancelado") &
+        (df_atendimentos["Status Serviço"].astype(str).str.lower() != "cancelado") &
         (data1_datetime.dt.date < hoje) &
         (data1_datetime.dt.date >= limite)
     ].copy()
@@ -361,16 +362,21 @@ def pipeline(file_path, output_dir):
         "Duração do Serviço","Hora de entrada","ID Prestador","Prestador", "Observações prestador"
     ]]
     salvar_df(df_historico_60_dias, "df_historico_60_dias", output_dir)
+
     df_cliente_prestador = df_historico_60_dias.groupby(
         ["CPF_CNPJ","ID Prestador"]
     ).size().reset_index(name="Qtd Atendimentos Cliente-Prestador")
     salvar_df(df_cliente_prestador, "df_cliente_prestador", output_dir)
+
     df_qtd_por_prestador = df_historico_60_dias.groupby(
         "ID Prestador"
     ).size().reset_index(name="Qtd Atendimentos Prestador")
     salvar_df(df_qtd_por_prestador, "df_qtd_por_prestador", output_dir)
+
     df_clientes_coord = df_clientes[["CPF_CNPJ","Latitude Cliente","Longitude Cliente"]].dropna().drop_duplicates("CPF_CNPJ")
     df_profissionais_coord = df_profissionais[["ID Prestador","Latitude Profissional","Longitude Profissional"]].dropna().drop_duplicates("ID Prestador")
+
+    # (Opcional) cálculo em batch para auditoria
     distancias = []
     for _, cliente in df_clientes_coord.iterrows():
         coord_cliente = (cliente["Latitude Cliente"], cliente["Longitude Cliente"])
@@ -386,6 +392,7 @@ def pipeline(file_path, output_dir):
     df_distancias_alerta = df_distancias[df_distancias["Distância (km)"] > 1000]
     salvar_df(df_distancias_alerta, "df_distancias_alerta", output_dir)
     salvar_df(df_distancias, "df_distancias", output_dir)
+
     df_preferencias_completo = df_preferencias.merge(
         df_clientes_coord, on="CPF_CNPJ", how="left"
     ).merge(
@@ -397,6 +404,7 @@ def pipeline(file_path, output_dir):
         "Latitude Profissional","Longitude Profissional"
     ]]
     salvar_df(df_preferencias_completo, "df_preferencias_completo", output_dir)
+
     df_bloqueio_completo = df_bloqueio.merge(
         df_clientes_coord, on="CPF_CNPJ", how="left"
     ).merge(
@@ -408,9 +416,10 @@ def pipeline(file_path, output_dir):
         "Latitude Profissional","Longitude Profissional"
     ]]
     salvar_df(df_bloqueio_completo, "df_bloqueio_completo", output_dir)
+
     ontem = datetime.now().date() - timedelta(days=1)
     df_futuros = df_atendimentos[
-        (df_atendimentos["Status Serviço"].str.lower() != "cancelado") &
+        (df_atendimentos["Status Serviço"].astype(str).str.lower() != "cancelado") &
         (df_atendimentos["Data 1"].dt.date > ontem)
     ].copy()
     df_futuros_com_clientes = df_futuros.merge(
@@ -426,11 +435,14 @@ def pipeline(file_path, output_dir):
         df_futuros_com_clientes["Longitude Cliente"].notnull()
     ][colunas_uteis].copy()
     salvar_df(df_atendimentos_futuros_validos, "df_atendimentos_futuros_validos", output_dir)
+
     df_atendimentos_sem_localizacao = df_futuros_com_clientes[
         df_futuros_com_clientes["Latitude Cliente"].isnull() |
         df_futuros_com_clientes["Longitude Cliente"].isnull()
     ][colunas_uteis].copy()
     salvar_df(df_atendimentos_sem_localizacao, "df_atendimentos_sem_localizacao", output_dir)
+
+    # Persistências (opcional)
     df_clientes.to_pickle('df_clientes.pkl')
     df_profissionais.to_pickle('df_profissionais.pkl')
     df_preferencias.to_pickle('df_preferencias.pkl')
@@ -448,28 +460,68 @@ def pipeline(file_path, output_dir):
     df_atendimentos_sem_localizacao.to_pickle('df_atendimentos_sem_localizacao.pkl')
     df_distancias_alerta.to_pickle('df_distancias_alerta.pkl')
 
+    # ============================
+    # 2) Distâncias dinâmicas on-the-fly (por atendimento)
+    # ============================
+    RECALC_DIST_ON_THE_FLY = True  # forçar recálculo por OS/CPF
+    _dist_cache_by_cpf = {}
 
+    def _coords_cliente(cpf):
+        cli = df_clientes[df_clientes["CPF_CNPJ"] == cpf]
+        if cli.empty:
+            return None
+        lat, lon = cli.iloc[0]["Latitude Cliente"], cli.iloc[0]["Longitude Cliente"]
+        if pd.isnull(lat) or pd.isnull(lon):
+            return None
+        return (float(lat), float(lon))
 
-    # --- Parâmetros de alocação/seleção ---
-    DELTA_KM = 1.0            # degrau mínimo entre candidatas na etapa de proximidade (1 km)
-    RAIO_QUERIDINHOS = 5.0     # raio para queridinhos na etapa dedicada
-    GARANTIR_COTA_QUERIDINHO = True  # tenta garantir 1 OS/dia p/ cada queridinho (quando possível)
+    def _coords_prof(id_prof):
+        prof = df_profissionais[df_profissionais["ID Prestador"].astype(str).str.strip() == str(id_prof).strip()]
+        if prof.empty:
+            return None
+        lat, lon = prof.iloc[0]["Latitude Profissional"], prof.iloc[0]["Longitude Profissional"]
+        if pd.isnull(lat) or pd.isnull(lon):
+            return None
+        return (float(lat), float(lon))
 
+    def _dist_dyn(cpf, id_prof):
+        cpf = str(cpf).strip()
+        id_prof = str(id_prof).strip()
+        if cpf not in _dist_cache_by_cpf:
+            _dist_cache_by_cpf[cpf] = {}
+        if id_prof in _dist_cache_by_cpf[cpf]:
+            return _dist_cache_by_cpf[cpf][id_prof]
+        c = _coords_cliente(cpf)
+        p = _coords_prof(id_prof)
+        if not c or not p:
+            _dist_cache_by_cpf[cpf][id_prof] = None
+            return None
+        try:
+            km = round(geodesic(c, p).km, 2)
+        except Exception:
+            km = None
+        _dist_cache_by_cpf[cpf][id_prof] = km
+        return km
 
+    def _all_dists_for_cpf(cpf):
+        rows = []
+        for idp in df_profissionais["ID Prestador"].astype(str):
+            d = _dist_dyn(cpf, idp)
+            if d is not None:
+                rows.append({"ID Prestador": str(idp).strip(), "Distância (km)": d})
+        if not rows:
+            return pd.DataFrame(columns=["ID Prestador", "Distância (km)"])
+        df = pd.DataFrame(rows)
+        return df.sort_values("Distância (km)")
 
-    
-    # =======================================================================
-    # MATRIZ DE ROTAS v2 — SEM REPETIÇÃO NO DIA + DEGRAU + PRIORIDADE QUERIDINHOS
-    # =======================================================================
-    
-    # --- Parâmetros de alocação/seleção ---
-    DELTA_KM = 0.5                     # degrau mínimo entre candidatas na etapa de proximidade
-    RAIO_QUERIDINHOS = 5.0             # raio (km) para queridinhos na etapa dedicada
+    # ============================
+    # 3) Parâmetros e helpers
+    # ============================
+    DELTA_KM = 1.0                     # degrau mínimo entre candidatas na etapa de proximidade (km)
+    RAIO_QUERIDINHOS = 5.0             # raio (km) para queridinhos
     GARANTIR_COTA_QUERIDINHO = True    # tenta garantir 1 OS/dia p/ cada queridinho (se possível)
-    EVITAR_REPETIR_EM_LISTAS_NO_DIA = True  # uma profissional só pode aparecer em UMA OS no dia (qualquer posição)
-    
-    from collections import defaultdict
-    
+    EVITAR_REPETIR_EM_LISTAS_NO_DIA = True  # uma profissional só aparece em UMA OS no dia (qualquer posição)
+
     def _parse_hora(hora_str):
         try:
             s = str(hora_str).strip()
@@ -477,54 +529,55 @@ def pipeline(file_path, output_dir):
             return (int(h), int(m))
         except Exception:
             return (99, 99)
-    
-    def _dist(cpf, id_prof, df_distancias):
-        row = df_distancias[
-            (df_distancias["CPF_CNPJ"] == cpf) &
-            (df_distancias["ID Prestador"].astype(str).str.strip() == str(id_prof).strip())
+
+    def _dist(cpf, id_prof, df_distancias_fallback):
+        if RECALC_DIST_ON_THE_FLY:
+            return _dist_dyn(cpf, id_prof)
+        row = df_distancias_fallback[
+            (df_distancias_fallback["CPF_CNPJ"] == cpf) &
+            (df_distancias_fallback["ID Prestador"].astype(str).str.strip() == str(id_prof).strip())
         ]
         return float(row["Distância (km)"].iloc[0]) if not row.empty else None
-    
-    def _prof_ok(id_prof, df_profissionais):
-        prof = df_profissionais[
-            df_profissionais["ID Prestador"].astype(str).str.strip() == str(id_prof).strip()
-        ]
-        if prof.empty: return None
-        if "inativo" in str(prof.iloc[0]["Nome Prestador"]).lower(): return None
-        if pd.isnull(prof.iloc[0]["Latitude Profissional"]) or pd.isnull(prof.iloc[0]["Longitude Profissional"]): return None
+
+    def _prof_ok(id_prof, df_profissionais_):
+        prof = df_profissionais_[df_profissionais_["ID Prestador"].astype(str).str.strip() == str(id_prof).strip()]
+        if prof.empty:
+            return None
+        if "inativo" in str(prof.iloc[0]["Nome Prestador"]).lower():
+            return None
+        if pd.isnull(prof.iloc[0]["Latitude Profissional"]) or pd.isnull(prof.iloc[0]["Longitude Profissional"]):
+            return None
         return prof.iloc[0]
-    
-    def _qtd_cli(df_cliente_prestador, cpf, id_prof):
-        x = df_cliente_prestador[
-            (df_cliente_prestador["CPF_CNPJ"] == cpf) &
-            (df_cliente_prestador["ID Prestador"].astype(str).str.strip() == str(id_prof).strip())
+
+    def _qtd_cli(df_cliente_prestador_, cpf, id_prof):
+        x = df_cliente_prestador_[
+            (df_cliente_prestador_["CPF_CNPJ"] == cpf) &
+            (df_cliente_prestador_["ID Prestador"].astype(str).str.strip() == str(id_prof).strip())
         ]
         return int(x["Qtd Atendimentos Cliente-Prestador"].iloc[0]) if not x.empty else 0
-    
-    def _qtd_tot(df_qtd_por_prestador, id_prof):
-        x = df_qtd_por_prestador[
-            df_qtd_por_prestador["ID Prestador"].astype(str).str.strip() == str(id_prof).strip()
-        ]
+
+    def _qtd_tot(df_qtd_por_prestador_, id_prof):
+        x = df_qtd_por_prestador_[df_qtd_por_prestador_["ID Prestador"].astype(str).str.strip() == str(id_prof).strip()]
         return int(x["Qtd Atendimentos Prestador"].iloc[0]) if not x.empty else 0
-    
+
     def _ordena_os(df_do_dia):
         tmp = df_do_dia.copy()
         tmp["_hora_tuple"] = tmp["Hora de entrada"].apply(_parse_hora)
         tmp["_dur"] = tmp["Duração do Serviço"]
         return tmp.sort_values(by=["_hora_tuple", "_dur"], ascending=[True, False])
-    
-    # Estruturas de controle por dia
-    preferida_do_cliente_no_dia   = defaultdict(dict)  # {date: {cpf: id_prof}}
-    profissionais_reservadas_no_dia = defaultdict(set) # {date: {id_prof,...}}   (reservadas como preferidas)
-    profissionais_ocupadas_no_dia   = defaultdict(set) # {date: {id_prof,...}}   (1ª posição de alguma OS)
-    profissionais_sugeridas_no_dia  = defaultdict(set) # {date: {id_prof,...}}   (apareceu em qualquer OS do dia)
-    
-    # Mapa CPF -> preferida (id prestador)
+
+    # Estruturas por dia
+    preferida_do_cliente_no_dia     = defaultdict(dict)  # {date: {cpf: id_prof}}
+    profissionais_reservadas_no_dia = defaultdict(set)   # {date: {id_prof,...}}
+    profissionais_ocupadas_no_dia   = defaultdict(set)   # {date: {id_prof,...}}  # 1ª posição
+    profissionais_sugeridas_no_dia  = defaultdict(set)   # {date: {id_prof,...}}  # apareceu em qualquer posição
+
+    # Mapa CPF -> preferida
     pref_map = df_preferencias.set_index("CPF_CNPJ")["ID Prestador"].astype(str).str.strip().to_dict()
-    
-    # -----------------------------------------------------------------------
-    # 1) PRÉ-RESERVA DE PREFERIDAS DO DIA (desempate: histórico desc, distância asc, hora asc)
-    # -----------------------------------------------------------------------
+
+    # ============================
+    # 4) Pré-reserva preferidas do dia
+    # ============================
     for data_atendimento, df_do_dia in df_atendimentos_futuros_validos.groupby(df_atendimentos_futuros_validos["Data 1"].dt.date):
         candidatos = []
         for _, row in df_do_dia.iterrows():
@@ -556,12 +609,12 @@ def pipeline(file_path, output_dir):
             esc = lst[0]
             preferida_do_cliente_no_dia[data_atendimento][esc["cpf"]] = id_prof
             profissionais_reservadas_no_dia[data_atendimento].add(id_prof)
-    
-    # -----------------------------------------------------------------------
-    # 2) ALOCAÇÃO DA 1ª CANDIDATA POR OS (sem repetir no dia; boost para queridinhas)
-    # -----------------------------------------------------------------------
+
+    # ============================
+    # 5) Alocação da 1ª candidata por OS
+    # ============================
     os_primeira_candidata = {}  # (date, OS) -> (id_prof, crit_text, criterio_str)
-    
+
     for data_atendimento, df_do_dia in df_atendimentos_futuros_validos.groupby(df_atendimentos_futuros_validos["Data 1"].dt.date):
         df_sorted = _ordena_os(df_do_dia)
         for _, row in df_sorted.iterrows():
@@ -571,28 +624,24 @@ def pipeline(file_path, output_dir):
                 df_bloqueio_completo[df_bloqueio_completo["CPF_CNPJ"] == cpf]["ID Prestador"]
                 .astype(str).str.strip().tolist()
             )
-    
+
             candidatos_ordem = []
-    
-            # 2.1 Preferência do cliente (se reservada para ESTE CPF)
+
             pref_id = preferida_do_cliente_no_dia[data_atendimento].get(cpf)
             if pref_id:
                 candidatos_ordem.append(("Preferência do Cliente", [pref_id]))
-    
-            # 2.2 Mais atendeu o cliente
+
             df_mais = df_cliente_prestador[df_cliente_prestador["CPF_CNPJ"] == cpf]
             if not df_mais.empty:
                 max_at = df_mais["Qtd Atendimentos Cliente-Prestador"].max()
                 ids_mais = df_mais[df_mais["Qtd Atendimentos Cliente-Prestador"] == max_at]["ID Prestador"].astype(str).tolist()
                 candidatos_ordem.append(("Mais atendeu o cliente", ids_mais))
-    
-            # 2.3 Último profissional (60 dias)
+
             df_hist = df_historico_60_dias[df_historico_60_dias["CPF_CNPJ"] == cpf].sort_values("Data 1", ascending=False)
             if not df_hist.empty:
                 ult_id = str(df_hist["ID Prestador"].iloc[0])
                 candidatos_ordem.append(("Último profissional que atendeu", [ult_id]))
-    
-            # 2.4 Queridinhos (<= RAIO_QUERIDINHOS), ordenados por distância (boost)
+
             ids_q = []
             for _, qrow in df_queridinhos.iterrows():
                 qid = str(qrow["ID Prestador"]).strip()
@@ -602,17 +651,15 @@ def pipeline(file_path, output_dir):
             if ids_q:
                 ids_q = [qid for qid, _ in sorted(ids_q, key=lambda x: x[1])]
                 candidatos_ordem.append(("Profissional preferencial da plataforma (até 5 km)", ids_q))
-    
-            # 2.5 Mais próximas geograficamente (ordenadas por km)
-            dist_cand = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
-            dist_cand["ID Prestador"] = dist_cand["ID Prestador"].astype(str).str.strip()
-            ids_prox = dist_cand.sort_values("Distância (km)")["ID Prestador"].tolist()
+
+            # proximidade pura para a 1ª escolha também olha dinâmica
+            all_d = _all_dists_for_cpf(cpf)
+            ids_prox = all_d["ID Prestador"].tolist()
             candidatos_ordem.append(("Mais próxima geograficamente", ids_prox))
-    
-            # 2.6 Sumidinhas
+
             ids_s = df_sumidinhos["ID Prestador"].astype(str).tolist()
             candidatos_ordem.append(("Baixa Disponibilidade", ids_s))
-    
+
             escolhida = None
             criterio_escolhido = None
             for criterio, lista_ids in candidatos_ordem:
@@ -637,7 +684,7 @@ def pipeline(file_path, output_dir):
                     break
                 if escolhida:
                     break
-    
+
             if escolhida:
                 profissionais_ocupadas_no_dia[data_atendimento].add(escolhida)
                 if EVITAR_REPETIR_EM_LISTAS_NO_DIA:
@@ -647,11 +694,11 @@ def pipeline(file_path, output_dir):
                 if d is not None:
                     crit += f" — {d:.2f} km"
                 os_primeira_candidata[(data_atendimento, os_id)] = (escolhida, crit, criterio_escolhido)
-    
-    # -----------------------------------------------------------------------
-    # 3) COTA MÍNIMA DE QUERIDINHOS (opcional, 1 OS/dia se houver encaixe)
-    # -----------------------------------------------------------------------
-    if GARANTIR_COTA_QUERIDINHO:
+
+    # ============================
+    # 6) Cota mínima de queridinhos (opcional)
+    # ============================
+    if GARANTIR_COTA_QUERIDINHOS:
         for data_atendimento, df_do_dia in df_atendimentos_futuros_validos.groupby(df_atendimentos_futuros_validos["Data 1"].dt.date):
             df_sorted = _ordena_os(df_do_dia)
             for _, qrow in df_queridinhos.iterrows():
@@ -690,10 +737,10 @@ def pipeline(file_path, output_dir):
                         crit += f" — {d:.2f} km"
                     os_primeira_candidata[(data_atendimento, os_id)] = (qid, crit, "Cota mínima queridinho")
                     break
-    
-    # -----------------------------------------------------------------------
-    # 4) LOOP PRINCIPAL — monta colunas 1..15 (sem repetir no dia; degrau na proximidade)
-    # -----------------------------------------------------------------------
+
+    # ============================
+    # 7) Loop principal — montar colunas 1..15
+    # ============================
     def _reservada_para_outro(data_atendimento, id_prof, cpf):
         id_prof = str(id_prof).strip()
         if id_prof not in profissionais_reservadas_no_dia[data_atendimento]:
@@ -701,9 +748,9 @@ def pipeline(file_path, output_dir):
         aloc = preferida_do_cliente_no_dia[data_atendimento]
         reservado_para = next((c for c, p in aloc.items() if str(p).strip() == id_prof), None)
         return bool(reservado_para and reservado_para != cpf)
-    
+
     matriz_resultado_corrigida = []
-    
+
     for _, atendimento in df_atendimentos_futuros_validos.iterrows():
         data_atendimento = atendimento["Data 1"].date()
         os_id = atendimento["OS"]
@@ -716,12 +763,12 @@ def pipeline(file_path, output_dir):
         obs_prestador = atendimento["Observações prestador"]
         ponto_referencia = atendimento["Ponto de Referencia"]
         plano = atendimento.get("Plano", "")
-    
+
         bloqueados = (
             df_bloqueio_completo[df_bloqueio_completo["CPF_CNPJ"] == cpf]["ID Prestador"]
             .astype(str).str.strip().tolist()
         )
-    
+
         cli = df_clientes[df_clientes["CPF_CNPJ"] == cpf]
         if not cli.empty:
             rua = cli.iloc[0]["Rua"]; numero = cli.iloc[0]["Número"]
@@ -729,7 +776,7 @@ def pipeline(file_path, output_dir):
             cidade = cli.iloc[0]["Cidade"]; latitude = cli.iloc[0]["Latitude Cliente"]; longitude = cli.iloc[0]["Longitude Cliente"]
         else:
             rua = numero = complemento = bairro = cidade = latitude = longitude = ""
-    
+
         linha = {
             "OS": os_id, "CPF_CNPJ": cpf, "Nome Cliente": nome_cliente, "Plano": plano,
             "Data 1": data_1, "Serviço": servico, "Duração do Serviço": duracao_servico,
@@ -741,39 +788,34 @@ def pipeline(file_path, output_dir):
             rua, numero, complemento, bairro, cidade, latitude, longitude,
             ja_atendeu=False, hora_entrada=hora_entrada, obs_prestador=obs_prestador
         )
-    
+
         utilizados = set()
         col = 1
-    
+
         def _add(id_prof, criterio_usado, ja_atendeu_flag):
             nonlocal col
             id_prof = str(id_prof).strip()
             if col > 15:
                 return False
-            # banimento global do dia (qualquer posição em qualquer OS)
             if EVITAR_REPETIR_EM_LISTAS_NO_DIA and id_prof in profissionais_sugeridas_no_dia[data_atendimento]:
                 return False
-            # não repetir na própria OS
             if id_prof in utilizados:
                 return False
-            # bloqueio do cliente
             if id_prof in bloqueados:
                 return False
-            # já ocupada como 1ª em outra OS
             if id_prof in profissionais_ocupadas_no_dia[data_atendimento]:
                 return False
-            # profissional válida e não reservada pra outro CPF
             prof = _prof_ok(id_prof, df_profissionais)
             if prof is None:
                 return False
             if _reservada_para_outro(data_atendimento, id_prof, cpf):
                 return False
-    
+
             q_cli = _qtd_cli(df_cliente_prestador, cpf, id_prof)
             q_tot = _qtd_tot(df_qtd_por_prestador, id_prof)
             d = _dist(cpf, id_prof, df_distancias)
             crit = f"cliente: {q_cli} | total: {q_tot}" + (f" — {d:.2f} km" if d is not None else "")
-    
+
             linha[f"Classificação da Profissional {col}"] = col
             linha[f"Critério {col}"] = crit
             linha[f"Nome Prestador {col}"] = prof["Nome Prestador"]
@@ -784,14 +826,14 @@ def pipeline(file_path, output_dir):
                 ja_atendeu=ja_atendeu_flag, hora_entrada=hora_entrada, obs_prestador=obs_prestador
             )
             linha[f"Critério Utilizado {col}"] = criterio_usado
-    
+
             utilizados.add(id_prof)
             if EVITAR_REPETIR_EM_LISTAS_NO_DIA:
                 profissionais_sugeridas_no_dia[data_atendimento].add(id_prof)
             col += 1
             return True
-    
-        # 4.1 posição 1: usa a alocação diária (se houver)
+
+        # 1ª posição (alocação diária)
         primeira = os_primeira_candidata.get((data_atendimento, os_id))
         if primeira:
             idp, crit_text, criterio_nome = primeira
@@ -809,8 +851,8 @@ def pipeline(file_path, output_dir):
                 linha[f"Critério Utilizado {col}"] = criterio_nome
                 utilizados.add(str(idp).strip())
                 col += 1
-    
-        # 4.2 Mais atendeu o cliente
+
+        # Mais atendeu o cliente
         if col <= 15:
             df_mais = df_cliente_prestador[df_cliente_prestador["CPF_CNPJ"] == cpf]
             if not df_mais.empty:
@@ -818,14 +860,14 @@ def pipeline(file_path, output_dir):
                 for idp in df_mais[df_mais["Qtd Atendimentos Cliente-Prestador"] == max_at]["ID Prestador"].astype(str):
                     if col > 15: break
                     _add(idp, "Mais atendeu o cliente", True)
-    
-        # 4.3 Último profissional (60 dias)
+
+        # Último profissional (60 dias)
         if col <= 15:
             df_hist = df_historico_60_dias[df_historico_60_dias["CPF_CNPJ"] == cpf].sort_values("Data 1", ascending=False)
             if not df_hist.empty:
                 _add(str(df_hist["ID Prestador"].iloc[0]), "Último profissional que atendeu", True)
-    
-        # 4.4 Queridinhos (<= RAIO_QUERIDINHOS km, por distância)
+
+        # Queridinhos (<= RAIO_QUERIDINHOS km)
         if col <= 15:
             ids_q = []
             for _, qrow in df_queridinhos.iterrows():
@@ -840,19 +882,18 @@ def pipeline(file_path, output_dir):
             for qid, _ in sorted(ids_q, key=lambda x: x[1]):
                 if col > 15: break
                 _add(qid, "Profissional preferencial da plataforma (até 5 km)", _qtd_cli(df_cliente_prestador, cpf, qid) > 0)
-    
-        # 4.5 Mais próximas geograficamente (com degrau DELTA_KM)
+
+        # Mais próximas geograficamente (deg. DELTA_KM) — on-the-fly
         if col <= 15:
-            dist_cand = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
-            dist_cand["ID Prestador"] = dist_cand["ID Prestador"].astype(str).str.strip()
-            dist_cand = dist_cand.drop_duplicates(subset=["ID Prestador"])
+            dist_cand = _all_dists_for_cpf(cpf)  # ID Prestador, Distância (km)
             def _ban(x):
                 return (
                     (x in bloqueados) or
                     (x in utilizados) or
                     (x in profissionais_ocupadas_no_dia[data_atendimento]) or
                     _reservada_para_outro(data_atendimento, x, cpf) or
-                    (EVITAR_REPETIR_EM_LISTAS_NO_DIA and x in profissionais_sugeridas_no_dia[data_atendimento])
+                    (EVITAR_REPETIR_EM_LISTAS_NO_DIA and x in profissionais_sugeridas_no_dia[data_atendimento]) or
+                    (_prof_ok(x, df_profissionais) is None)
                 )
             dist_cand = dist_cand[~dist_cand["ID Prestador"].apply(_ban)].sort_values("Distância (km)")
             ultimo_km = None
@@ -866,8 +907,8 @@ def pipeline(file_path, output_dir):
                     if dkm >= (ultimo_km + DELTA_KM):
                         if _add(idp, "Mais próxima geograficamente", _qtd_cli(df_cliente_prestador, cpf, idp) > 0):
                             ultimo_km = dkm
-    
-        # 4.6 Sumidinhas
+
+        # Sumidinhas
         if col <= 15:
             for sid in df_sumidinhos["ID Prestador"].astype(str):
                 if col > 15: break
@@ -876,20 +917,20 @@ def pipeline(file_path, output_dir):
                 if sid in profissionais_ocupadas_no_dia[data_atendimento]:
                     continue
                 _add(sid, "Baixa Disponibilidade", _qtd_cli(df_cliente_prestador, cpf, sid) > 0)
-    
+
         matriz_resultado_corrigida.append(linha)
-    
-    # -----------------------------------------------------------------------
-    # 5) DataFrame final de Rotas + mensagem com link de aceite + padronização colunas 1..15
-    # -----------------------------------------------------------------------
+
+    # ============================
+    # 8) DataFrame final + Excel
+    # ============================
     df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
-    
+
     app_url = "https://rotasvavive.streamlit.app/"
     df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
         lambda row: f"👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n\n{row['Mensagem Padrão']}",
         axis=1
     )
-    
+
     for i in range(1, 16):
         if f"Classificação da Profissional {i}" not in df_matriz_rotas.columns:
             df_matriz_rotas[f"Classificação da Profissional {i}"] = pd.NA
@@ -901,7 +942,7 @@ def pipeline(file_path, output_dir):
             df_matriz_rotas[f"Celular {i}"] = pd.NA
         if f"Critério Utilizado {i}" not in df_matriz_rotas.columns:
             df_matriz_rotas[f"Critério Utilizado {i}"] = pd.NA
-    
+
     base_cols = [
         "OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
         "Duração do Serviço", "Hora de entrada", "Observações prestador",
@@ -917,6 +958,7 @@ def pipeline(file_path, output_dir):
             f"Critério Utilizado {i}",
         ])
     df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
+
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
     with pd.ExcelWriter(final_path, engine='xlsxwriter') as writer:
         df_matriz_rotas.to_excel(writer, sheet_name="Rotas", index=False)
@@ -936,6 +978,7 @@ def pipeline(file_path, output_dir):
         df_atendimentos_futuros_validos.to_excel(writer, sheet_name="Atend Futuros OK", index=False)
         df_atendimentos_sem_localizacao.to_excel(writer, sheet_name="Atend Futuros Sem Loc", index=False)
         df_distancias_alerta.to_excel(writer, sheet_name="df_distancias_alert", index=False)
+
     return final_path
 
 import streamlit as st
@@ -1573,6 +1616,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
