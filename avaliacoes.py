@@ -463,7 +463,7 @@ def pipeline(file_path, output_dir):
     # =======================================================================
     
     # --- Parâmetros de alocação/seleção ---
-    DELTA_KM = 1.0                     # degrau mínimo entre candidatas na etapa de proximidade
+    DELTA_KM = 0.5                     # degrau mínimo entre candidatas na etapa de proximidade
     RAIO_QUERIDINHOS = 5.0             # raio (km) para queridinhos na etapa dedicada
     GARANTIR_COTA_QUERIDINHO = True    # tenta garantir 1 OS/dia p/ cada queridinho (se possível)
     EVITAR_REPETIR_EM_LISTAS_NO_DIA = True  # uma profissional só pode aparecer em UMA OS no dia (qualquer posição)
@@ -1573,6 +1573,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
