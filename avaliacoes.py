@@ -1152,8 +1152,8 @@ def pipeline(file_path, output_dir):
         df_atendimentos_sem_localizacao.to_excel(writer, sheet_name="Atend Futuros Sem Loc", index=False)
     
         # Auditorias
-        df_auditoria.to_excel(writer, sheet_name="Auditoria Proximidade", index=False)  # Camada 4
-        df_auditoria_c5.to_excel(writer, sheet_name="Auditoria Proximidade (Camada 5)", index=False)  # Camada 5
+        df_auditoria.to_excel(writer, sheet_name="Auditoria Prox_Cam4", index=False)  # Camada 4
+        df_auditoria_c5.to_excel(writer, sheet_name="Auditoria Prox_Cam5", index=False)  # Camada 5
     
     # --- RETORNO FINAL DA FUNÇÃO ---
     return final_path
@@ -1797,6 +1797,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
