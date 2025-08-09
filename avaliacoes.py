@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+ -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -463,7 +463,7 @@ def pipeline(file_path, output_dir):
     # ============================
     # PARÂMETROS
     # ============================
-    DELTA_KM = 0.2
+    DELTA_KM = 1.0
     RAIO_QUERIDINHOS = 5.0
     GARANTIR_COTA_QUERIDINHO = True
     EVITAR_REPETIR_EM_LISTAS_NO_DIA = True
@@ -658,21 +658,10 @@ def pipeline(file_path, output_dir):
                     break
     
     # ============================
-    # CAMADA 4 — OTIMIZAÇÃO POR PROXIMIDADE (Hungarian) — REESCRITA
+    # CAMADA 4 — OTIMIZAÇÃO POR PROXIMIDADE (Hungarian)
     # ============================
-
-    # Auditorias: sempre (re)inicializar no começo do processamento
-    auditoria_proximidade = []            # Camada 4
-    auditoria_proximidade_camada5 = []    # Camada 5
-
-
-    # 0) Garante que a lista de auditoria exista e seja global dentro do pipeline
-    try:
-        auditoria_proximidade
-    except NameError:
-        auditoria_proximidade = []
     
-    # 1) Implementação Hungarian (usa SciPy se disponível; senão, fallback)
+    # implementação hungarian fallback (pura) com penalidade alta para "arestas inválidas"
     try:
         from scipy.optimize import linear_sum_assignment
         def hungarian_min_cost(cost_matrix):
@@ -682,17 +671,21 @@ def pipeline(file_path, output_dir):
     except Exception:
         _has_scipy = False
         def hungarian_min_cost(cost):
-            # Fallback O(n^3)
+            # Implementação simplificada: converte para maximização via subtração da max
+            # e aplica algoritmo de Kuh-Munkres O(n^3).
             import math
             n = max(len(cost), len(cost[0]) if cost else 0)
+            # pad para matriz n x n
             C = [[10**6 for _ in range(n)] for __ in range(n)]
             for i in range(len(cost)):
                 for j in range(len(cost[0])):
                     C[i][j] = cost[i][j]
-            u = [0]*(n+1); v = [0]*(n+1); p = [0]*(n+1); way = [0]*(n+1)
+            u = [0]* (n+1); v = [0]*(n+1); p = [0]*(n+1); way = [0]*(n+1)
             for i in range(1, n+1):
-                p[0] = i; j0 = 0
-                minv = [math.inf]*(n+1); used = [False]*(n+1)
+                p[0] = i
+                j0 = 0
+                minv = [math.inf]*(n+1)
+                used = [False]*(n+1)
                 while True:
                     used[j0] = True
                     i0 = p[j0]; delta = math.inf; j1 = 0
@@ -721,40 +714,30 @@ def pipeline(file_path, output_dir):
                     ans[p[j]-1] = (p[j]-1, j-1)
             return [(i,j) for (i,j) in ans if i != -1 and j != -1]
     
+    # Auditoria
+    auditoria_proximidade = []  # linhas com: data, OS, cpf, prof_escolhida, dist_escolhida, prof_mais_proxima_elegivel, dist_mais_proxima, motivo
+    
     PENAL = 10**6  # custo alto para impossíveis
     
-    for data_atend, df_do_dia in df_atendimentos_futuros_validos.groupby(
-        df_atendimentos_futuros_validos["Data 1"].dt.date
-    ):
-        # OS ainda sem #1 (ou seja, não resolvidas pelas camadas 1..3 e 3.5)
+    for data_atend, df_do_dia in df_atendimentos_futuros_validos.groupby(df_atendimentos_futuros_validos["Data 1"].dt.date):
+        # OS ainda sem #1
         df_pend = df_do_dia[~df_do_dia["OS"].apply(lambda os_: (data_atend, os_) in os_primeira_candidata)].copy()
         if df_pend.empty:
             continue
     
-        # Profissionais livres e válidas
+        # profissionais livres (não ocupadas por camadas 1..3) e válidas
         prof_livres = [
             pid for pid in df_profissionais["ID Prestador"].astype(str)
             if (pid not in profissionais_ocupadas_no_dia[data_atend]) and (_prof_ok(pid, df_profissionais) is not None)
         ]
         if not prof_livres:
-            # Mesmo sem otimização, registramos na auditoria que nada pôde ser feito
-            for _, row in df_pend.iterrows():
-                auditoria_proximidade.append({
-                    "Data": data_atend,
-                    "OS": row["OS"],
-                    "CPF_CNPJ": row["CPF_CNPJ"],
-                    "Prof_Atribuida": None,
-                    "Dist_Atribuida_km": None,
-                    "Prof_Mais_Prox_Elegivel": None,
-                    "Dist_Mais_Prox_km": None,
-                    "Motivo_Nao_Mais_Proxima": "SEM_PROFISSIONAIS_LIVRES"
-                })
+            # sem ninguém livre — nada a otimizar
             continue
     
-        # 2) Monta a matriz de custos (linhas = OS pendentes; colunas = prof_livres)
+        # montar matriz de custos (linhas = OS pendentes; colunas = prof_livres)
         pend_rows = df_pend.reset_index(drop=True)
         cost = []
-        elig_map = []  # bools: se o par (OS, prof) é elegível
+        elig_map = []  # guarda quais pares são válidos
         for _, row in pend_rows.iterrows():
             cpf = row["CPF_CNPJ"]
             bloqueados = (
@@ -764,9 +747,10 @@ def pipeline(file_path, output_dir):
             linha_cost = []
             linha_elig = []
             for pid in prof_livres:
-                # Regras de inelegibilidade
+                # inválidos:
                 if pid in bloqueados:
                     linha_cost.append(PENAL); linha_elig.append(False); continue
+                # se a profissional foi reservada como preferida para outro CPF
                 if pid in profissionais_reservadas_no_dia[data_atend]:
                     aloc = preferida_do_cliente_no_dia[data_atend]
                     reservado_para = next((c for c, p in aloc.items() if str(p).strip() == pid), None)
@@ -781,91 +765,56 @@ def pipeline(file_path, output_dir):
             elig_map.append(linha_elig)
     
         if not cost or not cost[0]:
-            # Nada a otimizar, mas auditar mesmo assim
-            for _, row in pend_rows.iterrows():
-                auditoria_proximidade.append({
-                    "Data": data_atend,
-                    "OS": row["OS"],
-                    "CPF_CNPJ": row["CPF_CNPJ"],
-                    "Prof_Atribuida": None,
-                    "Dist_Atribuida_km": None,
-                    "Prof_Mais_Prox_Elegivel": None,
-                    "Dist_Mais_Prox_km": None,
-                    "Motivo_Nao_Mais_Proxima": "SEM_MATRIZ_DE_CUSTO"
-                })
             continue
     
-        # 3) Resolve a minimização global
         pairs = hungarian_min_cost(cost)  # lista de (i_linha_os, j_col_prof)
     
-        # 4) Aplica os pareamentos válidos e marca ocupações
         for i, j in pairs:
             if i < 0 or j < 0: 
                 continue
             if cost[i][j] >= PENAL:
-                continue  # pareamento inválido (impossível pelas regras)
+                continue  # pareamento inválido
     
             row = pend_rows.iloc[i]
-            os_id = row["OS"]; cpf = row["CPF_CNPJ"]; pid = str(prof_livres[j])
-            d = float(cost[i][j])
+            os_id = row["OS"]; cpf = row["CPF_CNPJ"]
+            pid = str(prof_livres[j])
     
-            crit_texto = (
-                f"cliente: {_qtd_cli(df_cliente_prestador, cpf, pid)} | "
-                f"total: {_qtd_tot(df_qtd_por_prestador, pid)} — {d:.2f} km"
-            )
-            os_primeira_candidata[(data_atend, os_id)] = (pid, crit_texto, "Proximidade (ótimo global)")
+            # marca alocação como "Mais próxima geograficamente (otimizado)"
+            d = cost[i][j]
+            crit_texto = f"cliente: {_qtd_cli(df_cliente_prestador, cpf, pid)} | total: {_qtd_tot(df_qtd_por_prestador, pid)} — {d:.2f} km"
+            os_primeira_candidata[(data_atend, os_id)] = (pid, crit_texto, "Mais próxima geograficamente (otimizado)")
             profissionais_ocupadas_no_dia[data_atend].add(pid)
             profissionais_sugeridas_no_dia[data_atend].add(pid)
     
-        # 5) AUDITORIA — registra para TODAS as OS pendentes (mesmo sem match)
+        # Auditoria: por OS pendente, quem era a mais próxima elegível?
         for idx, row in pend_rows.iterrows():
             os_id = row["OS"]; cpf = row["CPF_CNPJ"]
-    
-            # calcula "mais próxima elegível" (com base em elig_map)
+            # mais próxima elegível
             dist_line = cost[idx]
             elig_line = elig_map[idx]
+            if not dist_line:
+                continue
             best_j = None; best_d = None
             for jj, (dd, ok) in enumerate(zip(dist_line, elig_line)):
-                if not ok:
+                if not ok: 
                     continue
                 if (best_d is None) or (dd < best_d):
                     best_d = dd; best_j = jj
-    
             escolhido = os_primeira_candidata.get((data_atend, os_id))
-            pid_escolhido = None
-            dist_escolhida = None
-            motivo = ""
             if escolhido:
                 pid_escolhido = escolhido[0]
                 dist_escolhida = _dist_from_df(cpf, pid_escolhido, df_distancias)
-    
-            pid_best = str(prof_livres[best_j]) if best_j is not None else None
-            dist_best = float(best_d) if best_d is not None else None
-    
-            # Motivo:
-            # - se não houve escolhido => "NÃO_PAREADA"
-            # - se houve e é igual à mais próxima => "JA_ERA_A_MAIS_PROX"
-            # - se houve e é diferente => "OTIMO_GLOBAL_PRIORIZOU_OUTRA_OS"
-            if pid_escolhido is None:
-                motivo = "NAO_PAREADA"
-            elif pid_best is None:
-                motivo = "SEM_ELEGIVEIS"
-            elif pid_escolhido == pid_best:
-                motivo = "JA_ERA_A_MAIS_PROX"
-            else:
-                motivo = "OTIMO_GLOBAL_PRIORIZOU_OUTRA_OS"
-    
-            auditoria_proximidade.append({
-                "Data": data_atend,
-                "OS": os_id,
-                "CPF_CNPJ": cpf,
-                "Prof_Atribuida": pid_escolhido,
-                "Dist_Atribuida_km": dist_escolhida,
-                "Prof_Mais_Prox_Elegivel": pid_best,
-                "Dist_Mais_Prox_km": dist_best,
-                "Motivo_Nao_Mais_Proxima": motivo
-            })
-
+                pid_best = str(prof_livres[best_j]) if best_j is not None else None
+                dist_best = float(best_d) if best_d is not None else None
+                motivo = ""
+                if pid_best is not None and pid_escolhido != pid_best:
+                    motivo = "Alocação ótima global (outra OS precisava mais), mantendo não-repetição no dia."
+                auditoria_proximidade.append({
+                    "Data": data_atend, "OS": os_id, "CPF_CNPJ": cpf,
+                    "Prof_Atribuida": pid_escolhido, "Dist_Atribuida_km": dist_escolhida,
+                    "Prof_Mais_Prox_Elegivel": pid_best, "Dist_Mais_Prox_km": dist_best,
+                    "Motivo_Nao_Mais_Proxima": motivo
+                })
     
     # ============================
     # LOOP PRINCIPAL — montar colunas 1..15 (apresentação)
@@ -1011,42 +960,11 @@ def pipeline(file_path, output_dir):
                 if col > 15: break
                 _add(qid, "Profissional preferencial da plataforma (até 5 km)", _qtd_cli(df_cliente_prestador, cpf, qid) > 0)
     
-        # -------------------------------------------------------------------------
-        # DECLARE ISSO UMA ÚNICA VEZ, JUNTO COM AS OUTRAS LISTAS DE AUDITORIA
-        # -------------------------------------------------------------------------
-        
-        # 5) Mais próximas geograficamente (deg. 1 km entre entradas) + AUDITORIA
+        # 5) Mais próximas geograficamente (deg. 1 km entre entradas)
         if col <= 15:
-            # --- Preparação/Auditoria: "mais próxima absoluta" (sem filtros) ---
-            dist_all = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
-            dist_all["ID Prestador"] = dist_all["ID Prestador"].astype(str).str.strip()
-            dist_all = dist_all.sort_values("Distância (km)")
-        
-            prof_mais_prox_abs = None
-            dist_mais_prox_abs = None
-            if not dist_all.empty:
-                prof_mais_prox_abs = str(dist_all.iloc[0]["ID Prestador"]).strip()
-                dist_mais_prox_abs = float(dist_all.iloc[0]["Distância (km)"])
-        
-            # Função para classificar o motivo primário de NÃO alocação
-            def _motivo_nao_alocacao(pid, dkm, ultimo_km_local):
-                if pid in bloqueados:
-                    return "BLOQUEADA_PELO_CLIENTE"
-                if pid in utilizados:
-                    return "JA_UTILIZADA_NA_OS"
-                if pid in profissionais_ocupadas_no_dia[data_atendimento]:
-                    return "OCUPADA_NO_DIA"
-                if _reservada_para_outro(data_atendimento, pid, cpf):
-                    return "RESERVADA_PARA_OUTRO_CLIENTE"
-                if EVITAR_REPETIR_EM_LISTAS_NO_DIA and pid in profissionais_sugeridas_no_dia[data_atendimento]:
-                    return "EVITAR_REPETIR_NO_DIA"
-                if _prof_ok(pid, df_profissionais) is None:
-                    return "INVALIDA_SEM_COORDS/INATIVA"
-                if (ultimo_km_local is not None) and (dkm < (ultimo_km_local + DELTA_KM)):
-                    return "PULADA_POR_DELTA_KM"
-                return ""
-        
-            # --- Candidatas elegíveis segundo os filtros atuais ---
+            dist_cand = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
+            dist_cand["ID Prestador"] = dist_cand["ID Prestador"].astype(str).str.strip()
+            # tira invalidáveis
             def _ban(x):
                 return (
                     (x in bloqueados) or
@@ -1056,69 +974,18 @@ def pipeline(file_path, output_dir):
                     (EVITAR_REPETIR_EM_LISTAS_NO_DIA and x in profissionais_sugeridas_no_dia[data_atendimento]) or
                     (_prof_ok(x, df_profissionais) is None)
                 )
-        
-            dist_cand = dist_all[~dist_all["ID Prestador"].apply(_ban)].copy()
+            dist_cand = dist_cand[~dist_cand["ID Prestador"].apply(_ban)].sort_values("Distância (km)")
             ultimo_km = None
-            prox_first_alloc = None
-            prox_first_dist = None
-            skipped_by_delta = []
-        
             for _, rowd in dist_cand.iterrows():
-                if col > 15:
-                    break
-                idp = str(rowd["ID Prestador"]).strip()
-                dkm = float(rowd["Distância (km)"])
-                if ultimo_km is not None and dkm < (ultimo_km + DELTA_KM):
-                    skipped_by_delta.append({
-                        "prof": idp,
-                        "dist": dkm,
-                        "delta_anchor": ultimo_km,
-                        "delta_required": ultimo_km + DELTA_KM
-                    })
-                    continue
-                if _add(idp, "Mais próxima geograficamente", _qtd_cli(df_cliente_prestador, cpf, idp) > 0):
-                    if prox_first_alloc is None:
-                        prox_first_alloc = idp
-                        prox_first_dist = dkm
-                    ultimo_km = dkm
-        
-            # --- Motivo da NÃO alocação da mais próxima absoluta ---
-            motivo_nao_alocar_mais_prox = ""
-            if prof_mais_prox_abs:
-                entrou_como_primeira_prox = (prox_first_alloc is not None and prof_mais_prox_abs == prox_first_alloc)
-                if not entrou_como_primeira_prox:
-                    motivo_nao_alocar_mais_prox = _motivo_nao_alocacao(prof_mais_prox_abs, dist_mais_prox_abs or 0.0, None)
-                    if motivo_nao_alocar_mais_prox == "":
-                        if prox_first_alloc is not None and (dist_mais_prox_abs is not None):
-                            if dist_mais_prox_abs < (prox_first_dist + DELTA_KM):
-                                motivo_nao_alocar_mais_prox = "PULADA_POR_DELTA_KM"
-                        if motivo_nao_alocar_mais_prox == "" and col > 15:
-                            motivo_nao_alocar_mais_prox = "LIMITE_DE_15_POSICOES"
-                        if motivo_nao_alocar_mais_prox == "":
-                            motivo_nao_alocar_mais_prox = "DESCONHECIDO"
-        
-            # --- Registro na auditoria da Camada 5 ---
-            auditoria_proximidade_camada5.append({
-                "Data": data_atendimento,
-                "OS": os_id,
-                "CPF_CNPJ": cpf,
-                "Prof_Mais_Proxima_Absoluta": prof_mais_prox_abs,
-                "Dist_Mais_Proxima_Absoluta_km": dist_mais_prox_abs,
-                "Motivo_Nao_Alocar_Mais_Proxima": motivo_nao_alocar_mais_prox,
-                "Prof_Alocada_Proximidade": prox_first_alloc,
-                "Dist_Alocada_km": prox_first_dist,
-                "Pulos_DeltaKm": (
-                    "[" + ", ".join(
-                        f"(prof={p['prof']}, d={p['dist']:.2f}→âncora {p['delta_anchor']:.2f}+Δ{DELTA_KM:.2f})"
-                        for p in skipped_by_delta
-                    ) + "]"
-                ),
-                "Observacao": ("Sem elegíveis após filtros" if (prox_first_alloc is None and dist_cand.empty and not dist_all.empty)
-                               else ("Sem candidatas (sem coordenadas para o cliente)" if dist_all.empty else ""))
-            })
-
-    
-
+                if col > 15: break
+                idp = rowd["ID Prestador"]; dkm = float(rowd["Distância (km)"])
+                if ultimo_km is None:
+                    if _add(idp, "Mais próxima geograficamente", _qtd_cli(df_cliente_prestador, cpf, idp) > 0):
+                        ultimo_km = dkm
+                else:
+                    if dkm >= (ultimo_km + DELTA_KM):
+                        if _add(idp, "Mais próxima geograficamente", _qtd_cli(df_cliente_prestador, cpf, idp) > 0):
+                            ultimo_km = dkm
     
         # 6) Sumidinhas
         if col <= 15:
@@ -1169,18 +1036,7 @@ def pipeline(file_path, output_dir):
             f"Critério Utilizado {i}",
         ])
     df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
-
-
-    # --- CONSTRUIR DATAFRAMES DE AUDITORIA (ANTES DO EXCELWRITER) ---
-    df_auditoria_c5 = pd.DataFrame(auditoria_proximidade_camada5) if auditoria_proximidade_camada5 else pd.DataFrame(
-        columns=[
-            "Data","OS","CPF_CNPJ",
-            "Prof_Mais_Proxima_Absoluta","Dist_Mais_Proxima_Absoluta_km","Motivo_Nao_Alocar_Mais_Proxima",
-            "Prof_Alocada_Proximidade","Dist_Alocada_km","Pulos_DeltaKm","Observacao"
-        ]
-    )
     
-    # --- SALVAR TODAS AS ABAS NO EXCEL ---
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
     with pd.ExcelWriter(final_path, engine='xlsxwriter') as writer:
         df_matriz_rotas.to_excel(writer, sheet_name="Rotas", index=False)
@@ -1199,17 +1055,11 @@ def pipeline(file_path, output_dir):
         df_bloqueio_completo.to_excel(writer, sheet_name="Bloqueios Geo", index=False)
         df_atendimentos_futuros_validos.to_excel(writer, sheet_name="Atend Futuros OK", index=False)
         df_atendimentos_sem_localizacao.to_excel(writer, sheet_name="Atend Futuros Sem Loc", index=False)
-    
-        # Auditorias
-        df_auditoria.to_excel(writer, sheet_name="Auditoria Prox_Cam4", index=False)  # Camada 4
-        df_auditoria_c5.to_excel(writer, sheet_name="Auditoria Prox_Cam5", index=False)  # Camada 5
-    
-    # --- RETORNO FINAL DA FUNÇÃO ---
+        # NOVO: auditoria
+        df_auditoria.to_excel(writer, sheet_name="Auditoria Proximidade", index=False)
+
+
     return final_path
-
-
-
-
 
 import streamlit as st
 import os
@@ -1846,19 +1696,6 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
