@@ -1067,19 +1067,8 @@ def pipeline(file_path, output_dir):
                 "Observacao": ("Sem elegíveis após filtros" if (prox_first_alloc is None and dist_cand.empty and not dist_all.empty)
                                else ("Sem candidatas (sem coordenadas para o cliente)" if dist_all.empty else ""))
             })
-        # -------------------------------------------------------------------------
-        
-        # -------------------------------------------------------------------------
-        # NO FINAL, AO SALVAR O EXCEL (junto do df_auditoria)
-        df_auditoria_c5 = pd.DataFrame(auditoria_proximidade_camada5) if auditoria_proximidade_camada5 else pd.DataFrame(
-            columns=[
-                "Data","OS","CPF_CNPJ",
-                "Prof_Mais_Proxima_Absoluta","Dist_Mais_Proxima_Absoluta_km","Motivo_Nao_Alocar_Mais_Proxima",
-                "Prof_Alocada_Proximidade","Dist_Alocada_km","Pulos_DeltaKm","Observacao"
-            ]
-        )
-        df_auditoria_c5.to_excel(writer, sheet_name="Auditoria Proximidade (Camada 5)", index=False)
-        # -------------------------------------------------------------------------
+
+    
 
     
         # 6) Sumidinhas
@@ -1808,6 +1797,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
