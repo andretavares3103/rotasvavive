@@ -658,10 +658,16 @@ def pipeline(file_path, output_dir):
                     break
     
     # ============================
-    # CAMADA 4 — OTIMIZAÇÃO POR PROXIMIDADE (Hungarian)
+    # CAMADA 4 — OTIMIZAÇÃO POR PROXIMIDADE (Hungarian) — REESCRITA
     # ============================
     
-    # implementação hungarian fallback (pura) com penalidade alta para "arestas inválidas"
+    # 0) Garante que a lista de auditoria exista e seja global dentro do pipeline
+    try:
+        auditoria_proximidade
+    except NameError:
+        auditoria_proximidade = []
+    
+    # 1) Implementação Hungarian (usa SciPy se disponível; senão, fallback)
     try:
         from scipy.optimize import linear_sum_assignment
         def hungarian_min_cost(cost_matrix):
@@ -671,21 +677,17 @@ def pipeline(file_path, output_dir):
     except Exception:
         _has_scipy = False
         def hungarian_min_cost(cost):
-            # Implementação simplificada: converte para maximização via subtração da max
-            # e aplica algoritmo de Kuh-Munkres O(n^3).
+            # Fallback O(n^3)
             import math
             n = max(len(cost), len(cost[0]) if cost else 0)
-            # pad para matriz n x n
             C = [[10**6 for _ in range(n)] for __ in range(n)]
             for i in range(len(cost)):
                 for j in range(len(cost[0])):
                     C[i][j] = cost[i][j]
-            u = [0]* (n+1); v = [0]*(n+1); p = [0]*(n+1); way = [0]*(n+1)
+            u = [0]*(n+1); v = [0]*(n+1); p = [0]*(n+1); way = [0]*(n+1)
             for i in range(1, n+1):
-                p[0] = i
-                j0 = 0
-                minv = [math.inf]*(n+1)
-                used = [False]*(n+1)
+                p[0] = i; j0 = 0
+                minv = [math.inf]*(n+1); used = [False]*(n+1)
                 while True:
                     used[j0] = True
                     i0 = p[j0]; delta = math.inf; j1 = 0
@@ -714,32 +716,40 @@ def pipeline(file_path, output_dir):
                     ans[p[j]-1] = (p[j]-1, j-1)
             return [(i,j) for (i,j) in ans if i != -1 and j != -1]
     
-    # Auditoria
-    auditoria_proximidade = []  # linhas com: data, OS, cpf, prof_escolhida, dist_escolhida, prof_mais_proxima_elegivel, dist_mais_proxima, motivo
-    auditoria_proximidade_camada5 = []  # nova lista para Camada 5
-
-    
     PENAL = 10**6  # custo alto para impossíveis
     
-    for data_atend, df_do_dia in df_atendimentos_futuros_validos.groupby(df_atendimentos_futuros_validos["Data 1"].dt.date):
-        # OS ainda sem #1
+    for data_atend, df_do_dia in df_atendimentos_futuros_validos.groupby(
+        df_atendimentos_futuros_validos["Data 1"].dt.date
+    ):
+        # OS ainda sem #1 (ou seja, não resolvidas pelas camadas 1..3 e 3.5)
         df_pend = df_do_dia[~df_do_dia["OS"].apply(lambda os_: (data_atend, os_) in os_primeira_candidata)].copy()
         if df_pend.empty:
             continue
     
-        # profissionais livres (não ocupadas por camadas 1..3) e válidas
+        # Profissionais livres e válidas
         prof_livres = [
             pid for pid in df_profissionais["ID Prestador"].astype(str)
             if (pid not in profissionais_ocupadas_no_dia[data_atend]) and (_prof_ok(pid, df_profissionais) is not None)
         ]
         if not prof_livres:
-            # sem ninguém livre — nada a otimizar
+            # Mesmo sem otimização, registramos na auditoria que nada pôde ser feito
+            for _, row in df_pend.iterrows():
+                auditoria_proximidade.append({
+                    "Data": data_atend,
+                    "OS": row["OS"],
+                    "CPF_CNPJ": row["CPF_CNPJ"],
+                    "Prof_Atribuida": None,
+                    "Dist_Atribuida_km": None,
+                    "Prof_Mais_Prox_Elegivel": None,
+                    "Dist_Mais_Prox_km": None,
+                    "Motivo_Nao_Mais_Proxima": "SEM_PROFISSIONAIS_LIVRES"
+                })
             continue
     
-        # montar matriz de custos (linhas = OS pendentes; colunas = prof_livres)
+        # 2) Monta a matriz de custos (linhas = OS pendentes; colunas = prof_livres)
         pend_rows = df_pend.reset_index(drop=True)
         cost = []
-        elig_map = []  # guarda quais pares são válidos
+        elig_map = []  # bools: se o par (OS, prof) é elegível
         for _, row in pend_rows.iterrows():
             cpf = row["CPF_CNPJ"]
             bloqueados = (
@@ -749,10 +759,9 @@ def pipeline(file_path, output_dir):
             linha_cost = []
             linha_elig = []
             for pid in prof_livres:
-                # inválidos:
+                # Regras de inelegibilidade
                 if pid in bloqueados:
                     linha_cost.append(PENAL); linha_elig.append(False); continue
-                # se a profissional foi reservada como preferida para outro CPF
                 if pid in profissionais_reservadas_no_dia[data_atend]:
                     aloc = preferida_do_cliente_no_dia[data_atend]
                     reservado_para = next((c for c, p in aloc.items() if str(p).strip() == pid), None)
@@ -767,56 +776,91 @@ def pipeline(file_path, output_dir):
             elig_map.append(linha_elig)
     
         if not cost or not cost[0]:
+            # Nada a otimizar, mas auditar mesmo assim
+            for _, row in pend_rows.iterrows():
+                auditoria_proximidade.append({
+                    "Data": data_atend,
+                    "OS": row["OS"],
+                    "CPF_CNPJ": row["CPF_CNPJ"],
+                    "Prof_Atribuida": None,
+                    "Dist_Atribuida_km": None,
+                    "Prof_Mais_Prox_Elegivel": None,
+                    "Dist_Mais_Prox_km": None,
+                    "Motivo_Nao_Mais_Proxima": "SEM_MATRIZ_DE_CUSTO"
+                })
             continue
     
+        # 3) Resolve a minimização global
         pairs = hungarian_min_cost(cost)  # lista de (i_linha_os, j_col_prof)
     
+        # 4) Aplica os pareamentos válidos e marca ocupações
         for i, j in pairs:
             if i < 0 or j < 0: 
                 continue
             if cost[i][j] >= PENAL:
-                continue  # pareamento inválido
+                continue  # pareamento inválido (impossível pelas regras)
     
             row = pend_rows.iloc[i]
-            os_id = row["OS"]; cpf = row["CPF_CNPJ"]
-            pid = str(prof_livres[j])
+            os_id = row["OS"]; cpf = row["CPF_CNPJ"]; pid = str(prof_livres[j])
+            d = float(cost[i][j])
     
-            # marca alocação como "Mais próxima geograficamente (otimizado)"
-            d = cost[i][j]
-            crit_texto = f"cliente: {_qtd_cli(df_cliente_prestador, cpf, pid)} | total: {_qtd_tot(df_qtd_por_prestador, pid)} — {d:.2f} km"
-            os_primeira_candidata[(data_atend, os_id)] = (pid, crit_texto, "Mais próxima geograficamente (otimizado)")
+            crit_texto = (
+                f"cliente: {_qtd_cli(df_cliente_prestador, cpf, pid)} | "
+                f"total: {_qtd_tot(df_qtd_por_prestador, pid)} — {d:.2f} km"
+            )
+            os_primeira_candidata[(data_atend, os_id)] = (pid, crit_texto, "Proximidade (ótimo global)")
             profissionais_ocupadas_no_dia[data_atend].add(pid)
             profissionais_sugeridas_no_dia[data_atend].add(pid)
     
-        # Auditoria: por OS pendente, quem era a mais próxima elegível?
+        # 5) AUDITORIA — registra para TODAS as OS pendentes (mesmo sem match)
         for idx, row in pend_rows.iterrows():
             os_id = row["OS"]; cpf = row["CPF_CNPJ"]
-            # mais próxima elegível
+    
+            # calcula "mais próxima elegível" (com base em elig_map)
             dist_line = cost[idx]
             elig_line = elig_map[idx]
-            if not dist_line:
-                continue
             best_j = None; best_d = None
             for jj, (dd, ok) in enumerate(zip(dist_line, elig_line)):
-                if not ok: 
+                if not ok:
                     continue
                 if (best_d is None) or (dd < best_d):
                     best_d = dd; best_j = jj
+    
             escolhido = os_primeira_candidata.get((data_atend, os_id))
+            pid_escolhido = None
+            dist_escolhida = None
+            motivo = ""
             if escolhido:
                 pid_escolhido = escolhido[0]
                 dist_escolhida = _dist_from_df(cpf, pid_escolhido, df_distancias)
-                pid_best = str(prof_livres[best_j]) if best_j is not None else None
-                dist_best = float(best_d) if best_d is not None else None
-                motivo = ""
-                if pid_best is not None and pid_escolhido != pid_best:
-                    motivo = "Alocação ótima global (outra OS precisava mais), mantendo não-repetição no dia."
-                auditoria_proximidade.append({
-                    "Data": data_atend, "OS": os_id, "CPF_CNPJ": cpf,
-                    "Prof_Atribuida": pid_escolhido, "Dist_Atribuida_km": dist_escolhida,
-                    "Prof_Mais_Prox_Elegivel": pid_best, "Dist_Mais_Prox_km": dist_best,
-                    "Motivo_Nao_Mais_Proxima": motivo
-                })
+    
+            pid_best = str(prof_livres[best_j]) if best_j is not None else None
+            dist_best = float(best_d) if best_d is not None else None
+    
+            # Motivo:
+            # - se não houve escolhido => "NÃO_PAREADA"
+            # - se houve e é igual à mais próxima => "JA_ERA_A_MAIS_PROX"
+            # - se houve e é diferente => "OTIMO_GLOBAL_PRIORIZOU_OUTRA_OS"
+            if pid_escolhido is None:
+                motivo = "NAO_PAREADA"
+            elif pid_best is None:
+                motivo = "SEM_ELEGIVEIS"
+            elif pid_escolhido == pid_best:
+                motivo = "JA_ERA_A_MAIS_PROX"
+            else:
+                motivo = "OTIMO_GLOBAL_PRIORIZOU_OUTRA_OS"
+    
+            auditoria_proximidade.append({
+                "Data": data_atend,
+                "OS": os_id,
+                "CPF_CNPJ": cpf,
+                "Prof_Atribuida": pid_escolhido,
+                "Dist_Atribuida_km": dist_escolhida,
+                "Prof_Mais_Prox_Elegivel": pid_best,
+                "Dist_Mais_Prox_km": dist_best,
+                "Motivo_Nao_Mais_Proxima": motivo
+            })
+
     
     # ============================
     # LOOP PRINCIPAL — montar colunas 1..15 (apresentação)
@@ -1797,6 +1841,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
