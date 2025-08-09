@@ -1149,10 +1149,7 @@ def pipeline(file_path, output_dir):
         df_bloqueio_completo.to_excel(writer, sheet_name="Bloqueios Geo", index=False)
         df_atendimentos_futuros_validos.to_excel(writer, sheet_name="Atend Futuros OK", index=False)
         df_atendimentos_sem_localizacao.to_excel(writer, sheet_name="Atend Futuros Sem Loc", index=False)
-        # NOVO: auditoria
         df_auditoria.to_excel(writer, sheet_name="Auditoria Proximidade", index=False)
-
-
     return final_path
 
 import streamlit as st
@@ -1790,6 +1787,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
