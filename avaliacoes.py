@@ -960,11 +960,43 @@ def pipeline(file_path, output_dir):
                 if col > 15: break
                 _add(qid, "Profissional preferencial da plataforma (até 5 km)", _qtd_cli(df_cliente_prestador, cpf, qid) > 0)
     
-        # 5) Mais próximas geograficamente (deg. 1 km entre entradas)
+        # -------------------------------------------------------------------------
+        # DECLARE ISSO UMA ÚNICA VEZ, JUNTO COM AS OUTRAS LISTAS DE AUDITORIA
+        auditoria_proximidade_camada5 = []
+        # -------------------------------------------------------------------------
+        
+        # 5) Mais próximas geograficamente (deg. 1 km entre entradas) + AUDITORIA
         if col <= 15:
-            dist_cand = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
-            dist_cand["ID Prestador"] = dist_cand["ID Prestador"].astype(str).str.strip()
-            # tira invalidáveis
+            # --- Preparação/Auditoria: "mais próxima absoluta" (sem filtros) ---
+            dist_all = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
+            dist_all["ID Prestador"] = dist_all["ID Prestador"].astype(str).str.strip()
+            dist_all = dist_all.sort_values("Distância (km)")
+        
+            prof_mais_prox_abs = None
+            dist_mais_prox_abs = None
+            if not dist_all.empty:
+                prof_mais_prox_abs = str(dist_all.iloc[0]["ID Prestador"]).strip()
+                dist_mais_prox_abs = float(dist_all.iloc[0]["Distância (km)"])
+        
+            # Função para classificar o motivo primário de NÃO alocação
+            def _motivo_nao_alocacao(pid, dkm, ultimo_km_local):
+                if pid in bloqueados:
+                    return "BLOQUEADA_PELO_CLIENTE"
+                if pid in utilizados:
+                    return "JA_UTILIZADA_NA_OS"
+                if pid in profissionais_ocupadas_no_dia[data_atendimento]:
+                    return "OCUPADA_NO_DIA"
+                if _reservada_para_outro(data_atendimento, pid, cpf):
+                    return "RESERVADA_PARA_OUTRO_CLIENTE"
+                if EVITAR_REPETIR_EM_LISTAS_NO_DIA and pid in profissionais_sugeridas_no_dia[data_atendimento]:
+                    return "EVITAR_REPETIR_NO_DIA"
+                if _prof_ok(pid, df_profissionais) is None:
+                    return "INVALIDA_SEM_COORDS/INATIVA"
+                if (ultimo_km_local is not None) and (dkm < (ultimo_km_local + DELTA_KM)):
+                    return "PULADA_POR_DELTA_KM"
+                return ""
+        
+            # --- Candidatas elegíveis segundo os filtros atuais ---
             def _ban(x):
                 return (
                     (x in bloqueados) or
@@ -974,18 +1006,80 @@ def pipeline(file_path, output_dir):
                     (EVITAR_REPETIR_EM_LISTAS_NO_DIA and x in profissionais_sugeridas_no_dia[data_atendimento]) or
                     (_prof_ok(x, df_profissionais) is None)
                 )
-            dist_cand = dist_cand[~dist_cand["ID Prestador"].apply(_ban)].sort_values("Distância (km)")
+        
+            dist_cand = dist_all[~dist_all["ID Prestador"].apply(_ban)].copy()
             ultimo_km = None
+            prox_first_alloc = None
+            prox_first_dist = None
+            skipped_by_delta = []
+        
             for _, rowd in dist_cand.iterrows():
-                if col > 15: break
-                idp = rowd["ID Prestador"]; dkm = float(rowd["Distância (km)"])
-                if ultimo_km is None:
-                    if _add(idp, "Mais próxima geograficamente", _qtd_cli(df_cliente_prestador, cpf, idp) > 0):
-                        ultimo_km = dkm
-                else:
-                    if dkm >= (ultimo_km + DELTA_KM):
-                        if _add(idp, "Mais próxima geograficamente", _qtd_cli(df_cliente_prestador, cpf, idp) > 0):
-                            ultimo_km = dkm
+                if col > 15:
+                    break
+                idp = str(rowd["ID Prestador"]).strip()
+                dkm = float(rowd["Distância (km)"])
+                if ultimo_km is not None and dkm < (ultimo_km + DELTA_KM):
+                    skipped_by_delta.append({
+                        "prof": idp,
+                        "dist": dkm,
+                        "delta_anchor": ultimo_km,
+                        "delta_required": ultimo_km + DELTA_KM
+                    })
+                    continue
+                if _add(idp, "Mais próxima geograficamente", _qtd_cli(df_cliente_prestador, cpf, idp) > 0):
+                    if prox_first_alloc is None:
+                        prox_first_alloc = idp
+                        prox_first_dist = dkm
+                    ultimo_km = dkm
+        
+            # --- Motivo da NÃO alocação da mais próxima absoluta ---
+            motivo_nao_alocar_mais_prox = ""
+            if prof_mais_prox_abs:
+                entrou_como_primeira_prox = (prox_first_alloc is not None and prof_mais_prox_abs == prox_first_alloc)
+                if not entrou_como_primeira_prox:
+                    motivo_nao_alocar_mais_prox = _motivo_nao_alocacao(prof_mais_prox_abs, dist_mais_prox_abs or 0.0, None)
+                    if motivo_nao_alocar_mais_prox == "":
+                        if prox_first_alloc is not None and (dist_mais_prox_abs is not None):
+                            if dist_mais_prox_abs < (prox_first_dist + DELTA_KM):
+                                motivo_nao_alocar_mais_prox = "PULADA_POR_DELTA_KM"
+                        if motivo_nao_alocar_mais_prox == "" and col > 15:
+                            motivo_nao_alocar_mais_prox = "LIMITE_DE_15_POSICOES"
+                        if motivo_nao_alocar_mais_prox == "":
+                            motivo_nao_alocar_mais_prox = "DESCONHECIDO"
+        
+            # --- Registro na auditoria da Camada 5 ---
+            auditoria_proximidade_camada5.append({
+                "Data": data_atendimento,
+                "OS": os_id,
+                "CPF_CNPJ": cpf,
+                "Prof_Mais_Proxima_Absoluta": prof_mais_prox_abs,
+                "Dist_Mais_Proxima_Absoluta_km": dist_mais_prox_abs,
+                "Motivo_Nao_Alocar_Mais_Proxima": motivo_nao_alocar_mais_prox,
+                "Prof_Alocada_Proximidade": prox_first_alloc,
+                "Dist_Alocada_km": prox_first_dist,
+                "Pulos_DeltaKm": (
+                    "[" + ", ".join(
+                        f"(prof={p['prof']}, d={p['dist']:.2f}→âncora {p['delta_anchor']:.2f}+Δ{DELTA_KM:.2f})"
+                        for p in skipped_by_delta
+                    ) + "]"
+                ),
+                "Observacao": ("Sem elegíveis após filtros" if (prox_first_alloc is None and dist_cand.empty and not dist_all.empty)
+                               else ("Sem candidatas (sem coordenadas para o cliente)" if dist_all.empty else ""))
+            })
+        # -------------------------------------------------------------------------
+        
+        # -------------------------------------------------------------------------
+        # NO FINAL, AO SALVAR O EXCEL (junto do df_auditoria)
+        df_auditoria_c5 = pd.DataFrame(auditoria_proximidade_camada5) if auditoria_proximidade_camada5 else pd.DataFrame(
+            columns=[
+                "Data","OS","CPF_CNPJ",
+                "Prof_Mais_Proxima_Absoluta","Dist_Mais_Proxima_Absoluta_km","Motivo_Nao_Alocar_Mais_Proxima",
+                "Prof_Alocada_Proximidade","Dist_Alocada_km","Pulos_DeltaKm","Observacao"
+            ]
+        )
+        df_auditoria_c5.to_excel(writer, sheet_name="Auditoria Proximidade (Camada 5)", index=False)
+        # -------------------------------------------------------------------------
+
     
         # 6) Sumidinhas
         if col <= 15:
@@ -1696,6 +1790,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
