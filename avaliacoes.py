@@ -928,6 +928,11 @@ def pipeline(file_path, output_dir):
                 )
                 linha[f"Critério Utilizado {col}"] = criterio_nome
                 utilizados.add(str(idp).strip()); col += 1
+
+                # >>> NOVO: se a 1ª é Preferência do Cliente, não listar mais ninguém
+                if criterio_nome == "Preferência do Cliente":
+                matriz_resultado_corrigida.append(linha)
+                continue  # vai para a próxima OS
     
         # 2) Mais atendeu o cliente
         if col <= 15:
@@ -1788,6 +1793,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
