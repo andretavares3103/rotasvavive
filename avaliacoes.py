@@ -1132,7 +1132,7 @@ def pipeline(file_path, output_dir):
     df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
 
 
-    # Criar DataFrames de auditoria ANTES do writer
+    # --- CONSTRUIR DATAFRAMES DE AUDITORIA (ANTES DO EXCELWRITER) ---
     df_auditoria = pd.DataFrame(auditoria_proximidade) if auditoria_proximidade else pd.DataFrame(
         columns=["Data","OS","CPF_CNPJ","Prof_Atribuida","Dist_Atribuida_km","Prof_Mais_Prox_Elegivel","Dist_Mais_Prox_km","Motivo_Nao_Mais_Proxima"]
     )
@@ -1144,8 +1144,8 @@ def pipeline(file_path, output_dir):
             "Prof_Alocada_Proximidade","Dist_Alocada_km","Pulos_DeltaKm","Observacao"
         ]
     )
-
     
+    # --- SALVAR TODAS AS ABAS NO EXCEL ---
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
     with pd.ExcelWriter(final_path, engine='xlsxwriter') as writer:
         df_matriz_rotas.to_excel(writer, sheet_name="Rotas", index=False)
@@ -1164,9 +1164,14 @@ def pipeline(file_path, output_dir):
         df_bloqueio_completo.to_excel(writer, sheet_name="Bloqueios Geo", index=False)
         df_atendimentos_futuros_validos.to_excel(writer, sheet_name="Atend Futuros OK", index=False)
         df_atendimentos_sem_localizacao.to_excel(writer, sheet_name="Atend Futuros Sem Loc", index=False)
-        df_auditoria.to_excel(writer, sheet_name="Auditoria Proximidade", index=False)
-        df_auditoria_c5.to_excel(writer, sheet_name="Auditoria Proximidade (Camada 5)", index=False)    
+    
+        # Auditorias
+        df_auditoria.to_excel(writer, sheet_name="Auditoria Proximidade", index=False)  # Camada 4
+        df_auditoria_c5.to_excel(writer, sheet_name="Auditoria Proximidade (Camada 5)", index=False)  # Camada 5
+    
+    # --- RETORNO FINAL DA FUNÇÃO ---
     return final_path
+
 
 
 
@@ -1806,6 +1811,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
