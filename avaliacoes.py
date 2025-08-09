@@ -1259,7 +1259,7 @@ if not st.session_state.admin_autenticado:
 
 
 # Se autenticado, agora sim mostra TODAS as abas normalmente!
-tabs = st.tabs(["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites", "Profissionais Próximos", "Mensagem Rápida"])
+tabs = st.tabs(["Portal Atendimentos", "Upload de Arquivo", "Matriz de Rotas", "Aceites", "Profissionais Próximos", "Mensagem Rápida", "Auditoria (Proximidade)"])
 
 with tabs[1]:
     if "excel_processado" not in st.session_state:
@@ -1697,6 +1697,97 @@ with tabs[5]:
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
 
+
+with tabs[6]:
+    st.subheader("Auditoria por OS — Camada 4 (Proximidade)")
+    if not os.path.exists(ROTAS_FILE):
+        st.info("Faça o upload e processamento do arquivo para habilitar a auditoria.")
+    else:
+        try:
+            df_aud = pd.read_excel(ROTAS_FILE, sheet_name="Auditoria Proximidade")
+        except Exception:
+            st.info("A planilha não contém a aba 'Auditoria Proximidade'. Rode o pipeline novamente para gerar.")
+            df_aud = pd.DataFrame()
+
+        if df_aud.empty:
+            st.info("Sem registros de auditoria para exibir.")
+        else:
+            # Normalizações básicas
+            df_aud["OS"] = df_aud["OS"].astype(str).str.strip()
+
+            # Carrega apoio para enriquecer (datas, cliente e nomes das profissionais)
+            df_rotas = pd.read_excel(ROTAS_FILE, sheet_name="Rotas")
+            df_rotas["OS"] = df_rotas["OS"].astype(str).str.strip()
+            df_profs = pd.read_excel(ROTAS_FILE, sheet_name="Profissionais")
+            df_profs["ID Prestador"] = df_profs["ID Prestador"].astype(str).str.strip()
+
+            # Mapa id->nome
+            id2nome = dict(zip(df_profs["ID Prestador"], df_profs["Nome Prestador"]))
+
+            # Enriquecimentos
+            df_aud["Nome Prof Atribuída"] = df_aud["Prof_Atribuida"].astype(str).str.strip().map(id2nome)
+            df_aud["Nome Prof Mais Próx."] = df_aud["Prof_Mais_Prox_Elegivel"].astype(str).str.strip().map(id2nome)
+
+            df_aud = df_aud.merge(
+                df_rotas[["OS", "Nome Cliente", "Data 1", "Serviço"]],
+                how="left", on="OS"
+            )
+
+            # Sinaliza divergência (quando não foi a mais próxima individual)
+            df_aud["Divergência"] = (
+                df_aud["Prof_Atribuida"].astype(str).str.strip() !=
+                df_aud["Prof_Mais_Prox_Elegivel"].astype(str).str.strip()
+            )
+
+            # ---- Filtros ----
+            datas = (
+                df_aud["Data 1"].dropna().sort_values().dt.date.astype(str).unique()
+                if "Data 1" in df_aud and df_aud["Data 1"].notna().any() else []
+            )
+            colf1, colf2, colf3 = st.columns([1,1,1])
+            data_sel = colf1.selectbox("Filtrar por data", options=["Todos"] + list(datas))
+            only_div = colf2.toggle("Mostrar apenas divergências (não foi a mais próxima)", value=False)
+            os_opcoes = ["Todos"] + sorted(df_aud["OS"].dropna().astype(str).unique().tolist())
+            os_sel = colf3.selectbox("Filtrar por OS", options=os_opcoes)
+
+            df_view = df_aud.copy()
+            if data_sel != "Todos" and "Data 1" in df_view:
+                df_view = df_view[df_view["Data 1"].dt.date.astype(str) == data_sel]
+            if only_div:
+                df_view = df_view[df_view["Divergência"]]
+            if os_sel != "Todos":
+                df_view = df_view[df_view["OS"].astype(str) == os_sel]
+
+            # Ordenação amigável
+            if "Data 1" in df_view:
+                df_view = df_view.sort_values(["Data 1", "OS"])
+
+            # Seleção de colunas e formatações
+            cols_show = [
+                "Data 1", "OS", "Nome Cliente", "Serviço",
+                "Prof_Atribuida", "Nome Prof Atribuída", "Dist_Atribuida_km",
+                "Prof_Mais_Prox_Elegivel", "Nome Prof Mais Próx.", "Dist_Mais_Prox_km",
+                "Motivo_Nao_Mais_Proxima", "Divergência"
+            ]
+            cols_show = [c for c in cols_show if c in df_view.columns]
+            st.markdown("#### Resultado da Auditoria")
+            st.dataframe(df_view[cols_show], use_container_width=True)
+
+            # Download
+            import io
+            buff = io.BytesIO()
+            df_view.to_excel(buff, index=False)
+            st.download_button(
+                "📥 Baixar auditoria filtrada (xlsx)",
+                data=buff.getvalue(),
+                file_name="auditoria_proximidade_filtrada.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+            # Indicadores rápidos
+            total_linhas = len(df_view)
+            divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
+            st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
 
 
 
