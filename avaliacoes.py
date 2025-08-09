@@ -463,7 +463,7 @@ def pipeline(file_path, output_dir):
     # ============================
     # PARÂMETROS
     # ============================
-    DELTA_KM = 1.0
+    DELTA_KM = 0.2
     RAIO_QUERIDINHOS = 5.0
     GARANTIR_COTA_QUERIDINHO = True
     EVITAR_REPETIR_EM_LISTAS_NO_DIA = True
@@ -1797,6 +1797,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
