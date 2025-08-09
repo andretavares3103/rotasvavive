@@ -660,7 +660,12 @@ def pipeline(file_path, output_dir):
     # ============================
     # CAMADA 4 — OTIMIZAÇÃO POR PROXIMIDADE (Hungarian) — REESCRITA
     # ============================
-    
+
+    # Auditorias: sempre (re)inicializar no começo do processamento
+    auditoria_proximidade = []            # Camada 4
+    auditoria_proximidade_camada5 = []    # Camada 5
+
+
     # 0) Garante que a lista de auditoria exista e seja global dentro do pipeline
     try:
         auditoria_proximidade
@@ -1841,6 +1846,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
