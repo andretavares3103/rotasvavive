@@ -716,6 +716,8 @@ def pipeline(file_path, output_dir):
     
     # Auditoria
     auditoria_proximidade = []  # linhas com: data, OS, cpf, prof_escolhida, dist_escolhida, prof_mais_proxima_elegivel, dist_mais_proxima, motivo
+    auditoria_proximidade_camada5 = []  # nova lista para Camada 5
+
     
     PENAL = 10**6  # custo alto para impossíveis
     
@@ -962,7 +964,6 @@ def pipeline(file_path, output_dir):
     
         # -------------------------------------------------------------------------
         # DECLARE ISSO UMA ÚNICA VEZ, JUNTO COM AS OUTRAS LISTAS DE AUDITORIA
-        auditoria_proximidade_camada5 = []
         # -------------------------------------------------------------------------
         
         # 5) Mais próximas geograficamente (deg. 1 km entre entradas) + AUDITORIA
@@ -1133,10 +1134,6 @@ def pipeline(file_path, output_dir):
 
 
     # --- CONSTRUIR DATAFRAMES DE AUDITORIA (ANTES DO EXCELWRITER) ---
-    df_auditoria = pd.DataFrame(auditoria_proximidade) if auditoria_proximidade else pd.DataFrame(
-        columns=["Data","OS","CPF_CNPJ","Prof_Atribuida","Dist_Atribuida_km","Prof_Mais_Prox_Elegivel","Dist_Mais_Prox_km","Motivo_Nao_Mais_Proxima"]
-    )
-    
     df_auditoria_c5 = pd.DataFrame(auditoria_proximidade_camada5) if auditoria_proximidade_camada5 else pd.DataFrame(
         columns=[
             "Data","OS","CPF_CNPJ",
@@ -1811,6 +1808,7 @@ with tabs[5]:
                 "Se tiver interesse, por favor, nos avise!"
             )
             st.text_area("Mensagem WhatsApp", value=mensagem, height=260)
+
 
 
 
