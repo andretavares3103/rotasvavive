@@ -73,17 +73,35 @@ def exibe_formulario_aceite(os_id, origem=None):
         st.stop()
 
 def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
-    agora = pd.Timestamp.now()
+    # Normaliza entradas
+    profissional = (profissional or "").strip()
+    telefone = (telefone or "").strip()
+
+    # Valida obrigatórios
+    if not profissional or not telefone:
+        raise ValueError("Nome da profissional e telefone são obrigatórios.")
+
+    # (Opcional) Validação simples de telefone: 10 a 12 dígitos após limpar não-dígitos
+    import re
+    tel_digits = re.sub(r"\D", "", telefone)
+    if not (10 <= len(tel_digits) <= 12):
+        raise ValueError("Telefone inválido. Informe DDD+número (ex.: 31988887777).")
+
+    from datetime import datetime
+    ACEITES_FILE = "aceites.xlsx"
+    agora = datetime.now()
     data = agora.strftime("%d/%m/%Y")
     dia_semana = agora.strftime("%A")
     horario = agora.strftime("%H:%M:%S")
+
     if os.path.exists(ACEITES_FILE):
         df = pd.read_excel(ACEITES_FILE)
     else:
         df = pd.DataFrame(columns=[
-            "OS", "Profissional", "Telefone", "Aceitou", 
-            "Data do Aceite", "Dia da Semana", "Horário do Aceite", "Origem"
+            "OS","Profissional","Telefone","Aceitou",
+            "Data do Aceite","Dia da Semana","Horário do Aceite","Origem"
         ])
+
     nova_linha = {
         "OS": os_id,
         "Profissional": profissional,
@@ -96,6 +114,7 @@ def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
     }
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
     df.to_excel(ACEITES_FILE, index=False)
+
     enviar_email_aceite_gmail(os_id, profissional, telefone)
 
 aceite_os = st.query_params.get("aceite", None)
@@ -1798,6 +1817,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
