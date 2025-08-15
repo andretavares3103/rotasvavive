@@ -12,6 +12,25 @@ import io
 import smtplib
 from email.mime.text import MIMEText
 
+import re  # pode ficar junto dos outros imports
+
+def _validar_prof_e_tel(profissional, telefone):
+    prof = (profissional or "").strip()
+    tel = (telefone or "").strip()
+
+    if not prof:
+        raise ValueError("Nome da profissional é obrigatório.")
+    if not tel:
+        raise ValueError("Telefone é obrigatório.")
+
+    # Validação simples: DDD + número (10 a 12 dígitos é tolerante; ajuste conforme sua regra)
+    tel_digits = re.sub(r"\D", "", tel)
+    if not (10 <= len(tel_digits) <= 12):
+        raise ValueError("Telefone inválido. Informe DDD+número (ex.: 31988887777).")
+
+    return prof, tel
+
+
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"  # ou o nome correto do seu arquivo de clientes
 PORTAL_OS_LIST = "portal_atendimentos_os_list.json" # ou o nome correto da lista de OS (caso use JSON, por exemplo)
 
@@ -1657,14 +1676,15 @@ with tabs[0]:
                         profissional = st.text_input(f"Nome da Profissional", key=f"prof_nome_{os_id}")
                         telefone = st.text_input(f"Telefone para contato", key=f"prof_tel_{os_id}")
                         resposta = st.empty()
-                    
-                        if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
-                            if not profissional.strip() or not telefone.strip():
-                                resposta.error("❌ Por favor, preencha o nome da profissional e o telefone antes de confirmar o aceite.")
+                        
+                        campos_ok = (profissional or "").strip() and (telefone or "").strip()
+                        if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True, disabled=not campos_ok):
+                            try:
+                                salvar_aceite(os_id, profissional, telefone, True, origem="portal")
+                            except ValueError as e:
+                                resposta.error(f"❌ {e}")
                             else:
-                                salvar_aceite(os_id, profissional.strip(), telefone.strip(), True, origem="portal")
                                 resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
-
 
 
         else:
@@ -1817,6 +1837,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
