@@ -50,8 +50,8 @@ def enviar_email_aceite_gmail(os_id, profissional, telefone):
 
 def exibe_formulario_aceite(os_id, origem=None):
     st.header(f"Validação de Aceite (OS {os_id})")
-    profissional = st.text_input("Nome da Profissional")
-    telefone = st.text_input("Telefone para contato")
+    profissional = st.text_input("Nome da Profissional (OBRIGATORIO)")
+    telefone = st.text_input("Telefone para contato (OBRIGATORIO)")
     resposta = st.empty()
 
     # (NOVO) obrigatoriedade: só habilita botões quando os dois campos estiverem preenchidos
@@ -1836,3 +1836,4 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
