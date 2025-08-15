@@ -108,10 +108,6 @@ def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
 
     from datetime import datetime
     ACEITES_FILE = "aceites.xlsx"
-
-    profissional, telefone = _validar_prof_e_tel(profissional, telefone)
-
-    
     agora = datetime.now()
     data = agora.strftime("%d/%m/%Y")
     dia_semana = agora.strftime("%A")
@@ -1158,12 +1154,6 @@ PORTAL_OS_LIST = "portal_atendimentos_os_list.json"
 def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
     from datetime import datetime
     ACEITES_FILE = "aceites.xlsx"
-
-
-    profissional, telefone = _validar_prof_e_tel(profissional, telefone)
-
-
-    
     agora = datetime.now()
     data = agora.strftime("%d/%m/%Y")
     dia_semana = agora.strftime("%A")
@@ -1214,11 +1204,6 @@ if not st.session_state.admin_autenticado:
 
        # ---- REMOVER OS COM 3+ ACEITES SIM ----
         ACEITES_FILE = "aceites.xlsx"
-
-        profissional, telefone = _validar_prof_e_tel(profissional, telefone)
-
-
-        
         if os.path.exists(ACEITES_FILE):
             def padronizar_os_coluna(col):
                 def safe_os(x):
@@ -1852,8 +1837,6 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
-
-
 
 
 
