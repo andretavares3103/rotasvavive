@@ -12,25 +12,6 @@ import io
 import smtplib
 from email.mime.text import MIMEText
 
-import re  # pode ficar junto dos outros imports
-
-def _validar_prof_e_tel(profissional, telefone):
-    prof = (profissional or "").strip()
-    tel = (telefone or "").strip()
-
-    if not prof:
-        raise ValueError("Nome da profissional é obrigatório.")
-    if not tel:
-        raise ValueError("Telefone é obrigatório.")
-
-    # Validação simples: DDD + número (10 a 12 dígitos é tolerante; ajuste conforme sua regra)
-    tel_digits = re.sub(r"\D", "", tel)
-    if not (10 <= len(tel_digits) <= 12):
-        raise ValueError("Telefone inválido. Informe DDD+número (ex.: 31988887777).")
-
-    return prof, tel
-
-
 PORTAL_EXCEL = "portal_atendimentos_clientes.xlsx"  # ou o nome correto do seu arquivo de clientes
 PORTAL_OS_LIST = "portal_atendimentos_os_list.json" # ou o nome correto da lista de OS (caso use JSON, por exemplo)
 
@@ -73,54 +54,55 @@ def exibe_formulario_aceite(os_id, origem=None):
     telefone = st.text_input("Telefone para contato")
     resposta = st.empty()
 
+    # (NOVO) obrigatoriedade: só habilita botões quando os dois campos estiverem preenchidos
+    _ok = bool((profissional or "").strip()) and bool((telefone or "").strip())
+
     col1, col2 = st.columns(2)
     aceite_submetido = False
 
     with col1:
-        if st.button("Sim, aceito este atendimento"):
-            salvar_aceite(os_id, profissional, telefone, True, origem=origem)
-            resposta.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
-            aceite_submetido = True
+        if st.button("Sim, aceito este atendimento", disabled=not _ok):
+            try:
+                salvar_aceite(os_id, profissional, telefone, True, origem=origem)
+            except ValueError as e:
+                resposta.error(f"❌ {e}")
+            else:
+                resposta.success("✅ Obrigado! Seu aceite foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+                aceite_submetido = True
 
     with col2:
-        if st.button("Não posso aceitar"):
-            salvar_aceite(os_id, profissional, telefone, False, origem=origem)
-            resposta.success("✅ Obrigado! Fique de olho em novas oportunidades.")
-            aceite_submetido = True
+        if st.button("Não posso aceitar", disabled=not _ok):
+            try:
+                salvar_aceite(os_id, profissional, telefone, False, origem=origem)
+            except ValueError as e:
+                resposta.error(f"❌ {e}")
+            else:
+                resposta.success("✅ Obrigado! Fique de olho em novas oportunidades.")
+                aceite_submetido = True
 
     if aceite_submetido:
         st.stop()
 
 def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
-    # Normaliza entradas
+    # (NOVO) obrigatoriedade: valida back-end
     profissional = (profissional or "").strip()
     telefone = (telefone or "").strip()
+    if not profissional:
+        raise ValueError("Nome da Profissional é obrigatório.")
+    if not telefone:
+        raise ValueError("Telefone é obrigatório.")
 
-    # Valida obrigatórios
-    if not profissional or not telefone:
-        raise ValueError("Nome da profissional e telefone são obrigatórios.")
-
-    # (Opcional) Validação simples de telefone: 10 a 12 dígitos após limpar não-dígitos
-    import re
-    tel_digits = re.sub(r"\D", "", telefone)
-    if not (10 <= len(tel_digits) <= 12):
-        raise ValueError("Telefone inválido. Informe DDD+número (ex.: 31988887777).")
-
-    from datetime import datetime
-    ACEITES_FILE = "aceites.xlsx"
-    agora = datetime.now()
+    agora = pd.Timestamp.now()
     data = agora.strftime("%d/%m/%Y")
     dia_semana = agora.strftime("%A")
     horario = agora.strftime("%H:%M:%S")
-
     if os.path.exists(ACEITES_FILE):
         df = pd.read_excel(ACEITES_FILE)
     else:
         df = pd.DataFrame(columns=[
-            "OS","Profissional","Telefone","Aceitou",
-            "Data do Aceite","Dia da Semana","Horário do Aceite","Origem"
+            "OS", "Profissional", "Telefone", "Aceitou", 
+            "Data do Aceite", "Dia da Semana", "Horário do Aceite", "Origem"
         ])
-
     nova_linha = {
         "OS": os_id,
         "Profissional": profissional,
@@ -133,7 +115,6 @@ def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
     }
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
     df.to_excel(ACEITES_FILE, index=False)
-
     enviar_email_aceite_gmail(os_id, profissional, telefone)
 
 aceite_os = st.query_params.get("aceite", None)
@@ -1152,6 +1133,14 @@ PORTAL_OS_LIST = "portal_atendimentos_os_list.json"
 
 # Função para registrar aceite (usada nos cards públicos ANTES da senha)
 def salvar_aceite(os_id, profissional, telefone, aceitou, origem=None):
+    # (NOVO) obrigatoriedade: valida back-end (esta é a segunda definição que você já tinha)
+    profissional = (profissional or "").strip()
+    telefone = (telefone or "").strip()
+    if not profissional:
+        raise ValueError("Nome da Profissional é obrigatório.")
+    if not telefone:
+        raise ValueError("Telefone é obrigatório.")
+
     from datetime import datetime
     ACEITES_FILE = "aceites.xlsx"
     agora = datetime.now()
@@ -1217,7 +1206,7 @@ if not st.session_state.admin_autenticado:
             df["OS"] = padronizar_os_coluna(df["OS"])
             aceites_sim = df_aceites[df_aceites["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
             contagem = aceites_sim.groupby("OS").size()
-            os_3mais = contagem[contagem >= 4].index.tolist()
+            os_3mais = contagem[contagem >= 3].index.tolist()
             df = df[~df["OS"].isin(os_3mais)]
         # --------------------------------------
 
@@ -1282,9 +1271,17 @@ if not st.session_state.admin_autenticado:
                     profissional = st.text_input(f"Nome da Profissional", key=f"prof_nome_{os_id}")
                     telefone = st.text_input(f"Telefone para contato", key=f"prof_tel_{os_id}")
                     resposta = st.empty()
-                    if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True):
-                        salvar_aceite(os_id, profissional, telefone, True, origem="portal")
-                        resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
+
+                    # (NOVO) obrigatoriedade no card público (antes da senha)
+                    _ok = bool((profissional or "").strip()) and bool((telefone or "").strip())
+
+                    if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True, disabled=not _ok):
+                        try:
+                            salvar_aceite(os_id, profissional, telefone, True, origem="portal")
+                        except ValueError as e:
+                            resposta.error(f"❌ {e}")
+                        else:
+                            resposta.success("✅ Obrigado! Seu interesse foi registrado com sucesso. Em breve daremos retorno sobre o atendimento!")
     else:
         st.info("Nenhum atendimento disponível. Aguarde liberação do admin.")
 
@@ -1676,9 +1673,11 @@ with tabs[0]:
                         profissional = st.text_input(f"Nome da Profissional", key=f"prof_nome_{os_id}")
                         telefone = st.text_input(f"Telefone para contato", key=f"prof_tel_{os_id}")
                         resposta = st.empty()
-                        
-                        campos_ok = (profissional or "").strip() and (telefone or "").strip()
-                        if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True, disabled=not campos_ok):
+
+                        # (NOVO) obrigatoriedade também neste card (aba Portal)
+                        _ok = bool((profissional or "").strip()) and bool((telefone or "").strip())
+
+                        if st.button("Sim, tenho interesse neste atendimento.", key=f"btn_real_{os_id}", use_container_width=True, disabled=not _ok):
                             try:
                                 salvar_aceite(os_id, profissional, telefone, True, origem="portal")
                             except ValueError as e:
@@ -1837,16 +1836,3 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
-
-
-
-
-
-
-
-
-
-
-
-
-
