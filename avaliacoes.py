@@ -1206,7 +1206,7 @@ if not st.session_state.admin_autenticado:
             df["OS"] = padronizar_os_coluna(df["OS"])
             aceites_sim = df_aceites[df_aceites["Aceitou"].astype(str).str.strip().str.lower() == "sim"]
             contagem = aceites_sim.groupby("OS").size()
-            os_3mais = contagem[contagem >= 3].index.tolist()
+            os_3mais = contagem[contagem >= 1].index.tolist()
             df = df[~df["OS"].isin(os_3mais)]
         # --------------------------------------
 
@@ -1836,5 +1836,6 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
