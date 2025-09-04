@@ -1034,12 +1034,21 @@ def pipeline(file_path, output_dir):
     # DataFrame final de Rotas + Excel
     # ============================
     df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
-
-    # defina as colunas-base uma única vez
+    app_url = "https://rotasvavive.streamlit.app/"
+    df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
+        lambda row: f"👉 [Clique aqui para validar seu aceite]({app_url}?aceite={row['OS']})\n\n{row['Mensagem Padrão']}",
+        axis=1
+    )
+    
+    for i in range(1, 16):
+        for c in [f"Classificação da Profissional {i}", f"Critério {i}", f"Nome Prestador {i}", f"Celular {i}", f"Critério Utilizado {i}"]:
+            if c not in df_matriz_rotas.columns:
+                df_matriz_rotas[c] = pd.NA
+    
     base_cols = [
         "OS", "CPF_CNPJ", "Nome Cliente", "Data 1", "Serviço", "Plano",
         "Duração do Serviço", "Hora de entrada", "Observações prestador",
-        "Ponto de Referencia", "Mensagem Padrão"  # já inclui a coluna aqui
+        "Ponto de Referencia", "Mensagem Padrão"
     ]
     prestador_cols = []
     for i in range(1, 16):
@@ -1050,23 +1059,6 @@ def pipeline(file_path, output_dir):
             f"Celular {i}",
             f"Critério Utilizado {i}",
         ])
-    
-    if df_matriz_rotas.empty:
-        # quando não há nenhuma OS elegível
-        df_matriz_rotas = pd.DataFrame(columns=base_cols + prestador_cols)
-    else:
-        # só monta a mensagem quando houver linhas
-        df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas.apply(
-            lambda row: f"👉 [Clique aqui para validar seu aceite]({APP_URL}?aceite={row['OS']})\n\n{row['Mensagem Padrão']}",
-            axis=1
-        )
-        # garante colunas 1..15
-        for i in range(1, 16):
-            for c in [f"Classificação da Profissional {i}", f"Critério {i}", f"Nome Prestador {i}", f"Celular {i}", f"Critério Utilizado {i}"]:
-                if c not in df_matriz_rotas.columns:
-                    df_matriz_rotas[c] = pd.NA
-    
-    # ordena/seleciona colunas (agora seguro, mesmo vazio)
     df_matriz_rotas = df_matriz_rotas[base_cols + prestador_cols]
     
     final_path = os.path.join(output_dir, "rotas_bh_dados_tratados_completos.xlsx")
@@ -1844,8 +1836,6 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
-
-
 
 
 
