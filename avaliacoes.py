@@ -19,6 +19,8 @@ st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", la
 
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
+MAX_PROF_COLS = 7
+
 
 def enviar_email_aceite_gmail(os_id, profissional, telefone):
     remetente = "andre.mtavares3@gmail.com"  # <-- seu e-mail de envio
@@ -487,7 +489,6 @@ def pipeline(file_path, output_dir):
     GARANTIR_COTA_QUERIDINHO = True
     EVITAR_REPETIR_EM_LISTAS_NO_DIA = True
     RECALC_DIST_ON_THE_FLY = False  # aqui vamos usar df_distancias como fonte de verdade
-    MAX_PROF_COLS = 7
     
     from collections import defaultdict
     
@@ -1837,6 +1838,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
