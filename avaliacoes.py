@@ -487,6 +487,8 @@ def pipeline(file_path, output_dir):
     GARANTIR_COTA_QUERIDINHO = True
     EVITAR_REPETIR_EM_LISTAS_NO_DIA = True
     RECALC_DIST_ON_THE_FLY = False  # aqui vamos usar df_distancias como fonte de verdade
+    # NOVO: limite de colunas de profissionais por OS
+    MAX_PROF_COLS = 7
     
     from collections import defaultdict
     
@@ -892,7 +894,7 @@ def pipeline(file_path, output_dir):
         def _add(id_prof, criterio_usado, ja_atendeu_flag):
             nonlocal col
             id_prof = str(id_prof).strip()
-            if col > 15:
+            if col > MAX_PROF_COLS:   # era 15
                 return False
             if EVITAR_REPETIR_EM_LISTAS_NO_DIA and id_prof in profissionais_sugeridas_no_dia[data_atendimento]:
                 return False
@@ -954,22 +956,22 @@ def pipeline(file_path, output_dir):
                     continue  # vai para a próxima OS
     
         # 2) Mais atendeu o cliente
-        if col <= 15:
+        if col <= MAX_PROF_COLS::
             df_mais = df_cliente_prestador[df_cliente_prestador["CPF_CNPJ"] == cpf]
             if not df_mais.empty:
                 max_at = df_mais["Qtd Atendimentos Cliente-Prestador"].max()
                 for idp in df_mais[df_mais["Qtd Atendimentos Cliente-Prestador"] == max_at]["ID Prestador"].astype(str):
-                    if col > 15: break
+                    if col > MAX_PROF_COLS: break
                     _add(idp, "Mais atendeu o cliente", True)
     
         # 3) Último profissional (60 dias)
-        if col <= 15:
+        if col <= MAX_PROF_COLS::
             df_hist = df_historico_60_dias[df_historico_60_dias["CPF_CNPJ"] == cpf].sort_values("Data 1", ascending=False)
             if not df_hist.empty:
                 _add(str(df_hist["ID Prestador"].iloc[0]), "Último profissional que atendeu", True)
     
         # 4) Queridinhos (≤ 5 km)
-        if col <= 15:
+        if col <= MAX_PROF_COLS::
             ids_q = []
             for _, qrow in df_queridinhos.iterrows():
                 qid = str(qrow["ID Prestador"]).strip()
@@ -981,11 +983,11 @@ def pipeline(file_path, output_dir):
                 if d is not None and d <= RAIO_QUERIDINHOS:
                     ids_q.append((qid, d))
             for qid, _ in sorted(ids_q, key=lambda x: x[1]):
-                if col > 15: break
+                if col > MAX_PROF_COLS: break
                 _add(qid, "Profissional preferencial da plataforma (até 5 km)", _qtd_cli(df_cliente_prestador, cpf, qid) > 0)
     
         # 5) Mais próximas geograficamente (deg. 1 km entre entradas)
-        if col <= 15:
+        if col <= MAX_PROF_COLS::
             dist_cand = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
             dist_cand["ID Prestador"] = dist_cand["ID Prestador"].astype(str).str.strip()
             # tira invalidáveis
@@ -1001,7 +1003,7 @@ def pipeline(file_path, output_dir):
             dist_cand = dist_cand[~dist_cand["ID Prestador"].apply(_ban)].sort_values("Distância (km)")
             ultimo_km = None
             for _, rowd in dist_cand.iterrows():
-                if col > 15: break
+                if col > MAX_PROF_COLS: break
                 idp = rowd["ID Prestador"]; dkm = float(rowd["Distância (km)"])
                 if ultimo_km is None:
                     if _add(idp, "Mais próxima geograficamente", _qtd_cli(df_cliente_prestador, cpf, idp) > 0):
@@ -1012,9 +1014,9 @@ def pipeline(file_path, output_dir):
                             ultimo_km = dkm
     
         # 6) Sumidinhas
-        if col <= 15:
+        if col <= MAX_PROF_COLS::
             for sid in df_sumidinhos["ID Prestador"].astype(str):
-                if col > 15: break
+                if col > MAX_PROF_COLS: break
                 if EVITAR_REPETIR_EM_LISTAS_NO_DIA and sid in profissionais_sugeridas_no_dia[data_atendimento]:
                     continue
                 if sid in profissionais_ocupadas_no_dia[data_atendimento]:
@@ -1040,7 +1042,7 @@ def pipeline(file_path, output_dir):
         axis=1
     )
     
-    for i in range(1, 16):
+    for i in range(1, MAX_PROF_COLS + 1):
         for c in [f"Classificação da Profissional {i}", f"Critério {i}", f"Nome Prestador {i}", f"Celular {i}", f"Critério Utilizado {i}"]:
             if c not in df_matriz_rotas.columns:
                 df_matriz_rotas[c] = pd.NA
@@ -1051,7 +1053,7 @@ def pipeline(file_path, output_dir):
         "Ponto de Referencia", "Mensagem Padrão"
     ]
     prestador_cols = []
-    for i in range(1, 16):
+    for i in range(1, MAX_PROF_COLS + 1):
         prestador_cols.extend([
             f"Classificação da Profissional {i}",
             f"Critério {i}",
@@ -1364,7 +1366,7 @@ with tabs[2]:
         clientes = df_rotas["Nome Cliente"].dropna().unique()
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_rotas")
         profissionais = []
-        for i in range(1, 11):
+        for i in range(1, MAX_PROF_COLS + 1):
             profissionais.extend(df_rotas[f"Nome Prestador {i}"].dropna().unique())
         profissionais = list(set([p for p in profissionais if isinstance(p, str)]))
         profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + profissionais, key="prof_rotas")
@@ -1375,7 +1377,7 @@ with tabs[2]:
             df_rotas_filt = df_rotas_filt[df_rotas_filt["Nome Cliente"] == cliente_sel]
         if profissional_sel != "Todos":
             mask = False
-            for i in range(1, 11):
+            for i in range(1, MAX_PROF_COLS + 1):
                 mask |= (df_rotas_filt[f"Nome Prestador {i}"] == profissional_sel)
             df_rotas_filt = df_rotas_filt[mask]
         st.dataframe(df_rotas_filt, use_container_width=True)
@@ -1836,6 +1838,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
