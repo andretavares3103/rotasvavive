@@ -956,7 +956,7 @@ def pipeline(file_path, output_dir):
                     continue  # vai para a próxima OS
     
         # 2) Mais atendeu o cliente
-        if col <= MAX_PROF_COLS::
+        if col <= MAX_PROF_COLS:
             df_mais = df_cliente_prestador[df_cliente_prestador["CPF_CNPJ"] == cpf]
             if not df_mais.empty:
                 max_at = df_mais["Qtd Atendimentos Cliente-Prestador"].max()
@@ -965,13 +965,13 @@ def pipeline(file_path, output_dir):
                     _add(idp, "Mais atendeu o cliente", True)
     
         # 3) Último profissional (60 dias)
-        if col <= MAX_PROF_COLS::
+        if col <= MAX_PROF_COLS:
             df_hist = df_historico_60_dias[df_historico_60_dias["CPF_CNPJ"] == cpf].sort_values("Data 1", ascending=False)
             if not df_hist.empty:
                 _add(str(df_hist["ID Prestador"].iloc[0]), "Último profissional que atendeu", True)
     
         # 4) Queridinhos (≤ 5 km)
-        if col <= MAX_PROF_COLS::
+        if col <= MAX_PROF_COLS:
             ids_q = []
             for _, qrow in df_queridinhos.iterrows():
                 qid = str(qrow["ID Prestador"]).strip()
@@ -987,7 +987,7 @@ def pipeline(file_path, output_dir):
                 _add(qid, "Profissional preferencial da plataforma (até 5 km)", _qtd_cli(df_cliente_prestador, cpf, qid) > 0)
     
         # 5) Mais próximas geograficamente (deg. 1 km entre entradas)
-        if col <= MAX_PROF_COLS::
+        if col <= MAX_PROF_COLS:
             dist_cand = df_distancias[df_distancias["CPF_CNPJ"] == cpf].copy()
             dist_cand["ID Prestador"] = dist_cand["ID Prestador"].astype(str).str.strip()
             # tira invalidáveis
@@ -1014,7 +1014,7 @@ def pipeline(file_path, output_dir):
                             ultimo_km = dkm
     
         # 6) Sumidinhas
-        if col <= MAX_PROF_COLS::
+        if col <= MAX_PROF_COLS:
             for sid in df_sumidinhos["ID Prestador"].astype(str):
                 if col > MAX_PROF_COLS: break
                 if EVITAR_REPETIR_EM_LISTAS_NO_DIA and sid in profissionais_sugeridas_no_dia[data_atendimento]:
@@ -1838,6 +1838,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
