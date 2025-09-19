@@ -487,7 +487,6 @@ def pipeline(file_path, output_dir):
     GARANTIR_COTA_QUERIDINHO = True
     EVITAR_REPETIR_EM_LISTAS_NO_DIA = True
     RECALC_DIST_ON_THE_FLY = False  # aqui vamos usar df_distancias como fonte de verdade
-    # NOVO: limite de colunas de profissionais por OS
     MAX_PROF_COLS = 7
     
     from collections import defaultdict
@@ -1838,6 +1837,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
