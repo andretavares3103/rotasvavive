@@ -19,7 +19,7 @@ st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", la
 
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
-MAX_PROF_COLS = 4
+MAX_PROF_COLS = 6
 
 
 def enviar_email_aceite_gmail(os_id, profissional, telefone):
@@ -1838,6 +1838,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
