@@ -24,7 +24,7 @@ MAX_PROF_COLS = 4
 
 def enviar_email_aceite_gmail(os_id, profissional, telefone):
     remetente = "andre.mtavares3@gmail.com"  # <-- seu e-mail de envio
-    senha = "3473010803474"                  # <-- sua senha de app do Gmail (cuidado ao versionar!)
+    senha = "0"                  # <-- sua senha de app do Gmail (cuidado ao versionar!)
     destinatario = "bh.savassi@vavive.com.br"
 
     assunto = f"Novo aceite registrado | OS {os_id}"
@@ -1838,6 +1838,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
