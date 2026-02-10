@@ -525,8 +525,8 @@ def pipeline(file_path, output_dir, MAX_PROF_COLS):
 
     df_atendimentos = pd.read_excel(file_path, sheet_name="Atendimentos")
     colunas_desejadas = [
-        "OS","Status Serviço","Data 1","
-        ","Plano","CPF/ CNPJ","Cliente","Serviço",
+        "OS","Status Serviço","Data 1",
+        "Plano","CPF/ CNPJ","Cliente","Serviço",
         "Horas de serviço","Hora de entrada","Observações atendimento",
         "Observações prestador","Ponto de Referencia","#Num Prestador","Prestador"
     ]
@@ -1629,3 +1629,4 @@ with tabs[6]:
             )
 
             st.dataframe(df_aud, use_container_width=True)
+
