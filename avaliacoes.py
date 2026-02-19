@@ -170,10 +170,11 @@ def gerar_mensagem_personalizada(
         maps_url = ""
     fechamento = (
         "SIM ou NÃO para o aceite!" if ja_atendeu
-        else "Acesse o link ao final da mensagem e responda com SIM caso tenha disponibilidade!"
+        else "Acesse o link no início da mensagem e responda com SIM caso tenha disponibilidade!"
     )
     rodape = """
-O atendimento será confirmado após o aceite!
+
+*AGUARDE NOSSA CONFIRMAÇÃO*
 *1)*    Lembre que o cliente irá receber o *profissional indicado pela Vavivê*.
 *2)*    Lembre-se das nossas  confirmações do atendimento!
 
@@ -1838,6 +1839,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
