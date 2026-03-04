@@ -19,7 +19,7 @@ st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", la
 
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
-MAX_PROF_COLS = 4
+MAX_PROF_COLS = 6
 
 
 def enviar_email_aceite_gmail(os_id, profissional, telefone):
@@ -1368,7 +1368,9 @@ with tabs[2]:
         cliente_sel = st.selectbox("Filtrar por cliente", options=["Todos"] + list(clientes), key="cliente_rotas")
         profissionais = []
         for i in range(1, MAX_PROF_COLS + 1):
-            profissionais.extend(df_rotas[f"Nome Prestador {i}"].dropna().unique())
+            col_name = f"Nome Prestador {i}"
+            if col_name in df_rotas.columns:
+                profissionais.extend(df_rotas[col_name].dropna().unique())
         profissionais = list(set([p for p in profissionais if isinstance(p, str)]))
         profissional_sel = st.selectbox("Filtrar por profissional", options=["Todos"] + profissionais, key="prof_rotas")
         df_rotas_filt = df_rotas.copy()
@@ -1379,7 +1381,9 @@ with tabs[2]:
         if profissional_sel != "Todos":
             mask = False
             for i in range(1, MAX_PROF_COLS + 1):
-                mask |= (df_rotas_filt[f"Nome Prestador {i}"] == profissional_sel)
+                col_name = f"Nome Prestador {i}"
+                if col_name in df_rotas_filt.columns:
+                    mask |= (df_rotas_filt[col_name] == profissional_sel)
             df_rotas_filt = df_rotas_filt[mask]
         st.dataframe(df_rotas_filt, use_container_width=True)
         st.download_button(
@@ -1839,6 +1843,7 @@ with tabs[6]:
             total_linhas = len(df_view)
             divergentes = int(df_view["Divergência"].sum()) if "Divergência" in df_view else 0
             st.caption(f"Linhas exibidas: {total_linhas} | Divergências: {divergentes}")
+
 
 
 
