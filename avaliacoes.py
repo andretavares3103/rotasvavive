@@ -19,7 +19,7 @@ st.set_page_config(page_title="BELO HORIZONTE || Otimização Rotas Vavivê", la
 
 ACEITES_FILE = "aceites.xlsx"
 ROTAS_FILE = "rotas_bh_dados_tratados_completos.xlsx"
-MAX_PROF_COLS = 5
+MAX_PROF_COLS = 7
 
 
 def enviar_email_aceite_gmail(os_id, profissional, telefone):
